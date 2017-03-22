@@ -27,19 +27,30 @@ void add_history(char* unused) {}
 
 // lvals represent the result of evaluating a lisp
 // expression
-enum {LVAL_NUM, LVAL_ERR};
+enum {LVAL_INT, LVAL_DBL, LVAL_ERR};
 enum {LERR_DIV_ZERO, LERR_BAD_OP, LERR_BAD_NUM};
+// enum to figure out whether we are dealing with operations
+// with two integers or two doubles
+enum {FIRST_INT, FIRST_DBL, TWO_INTS, TWO_DBLS};
 typedef struct {
 	int type;
-	long num;
+	double dbl;
+    long num;
 	int err;
 } lval;
 
-lval lval_num(long x) {
+lval lval_int(long x) {
 	lval v;
-	v.type = LVAL_NUM;
+	v.type = LVAL_INT;
 	v.num = x;
 	return v;
+}
+
+lval lval_dbl(double x) {
+    lval v;
+    v.type = LVAL_DBL;
+    v.dbl = x;
+    return v;
 }
 
 lval lval_err(int x) {
@@ -51,9 +62,12 @@ lval lval_err(int x) {
 
 void lval_print(lval v) {
 	switch (v.type) {
-		case LVAL_NUM:
-			printf("%li", v.num);
+		case LVAL_INT:
+			printf("%ld", v.num);
 			break;
+        case LVAL_DBL:
+            printf("%f", v.dbl);
+            break;
 		case LVAL_ERR:
 			switch (v.err) {
 				case LERR_DIV_ZERO:
@@ -66,7 +80,7 @@ void lval_print(lval v) {
 					printf("Error: Invalid number.");
 					break;
 			}
-		break;
+		    break;
 	}
 }
 
@@ -85,7 +99,8 @@ int main(int argc, char** argv) {
     
     // Create parser
     mpc_parser_t* Operator = mpc_new("operator");
-    mpc_parser_t* Number = mpc_new("number");
+    mpc_parser_t* Integer = mpc_new("integer");
+    mpc_parser_t* Double = mpc_new("double");
     mpc_parser_t* Expr = mpc_new("expr");
     mpc_parser_t* Lispr = mpc_new("lispr");
     
@@ -93,10 +108,11 @@ int main(int argc, char** argv) {
         "\
           operator: '+' | '/' | '*' | '-' | '%' | '^' |\
 		  	\"min\" | \"max\" ; \
-          number: /-?[0-9]+[.]?[0-9]*/; \
-          expr: <number> | '(' <operator> <expr>+ ')'; \
+          double: /-?[0-9]+[.][0-9]*/; \
+          integer: /-?[0-9]+/; \
+          expr: <integer> | <double> | '(' <operator> <expr>+ ')'; \
           lispr: /^/ <operator> <expr>+ /$/; \
-        ", Operator, Number, Expr, Lispr);
+        ", Operator, Integer, Double, Expr, Lispr);
     
     puts("Lispr Version 0.0.0.0.1");
     puts("Press ctrl+c to Exit\n");
@@ -123,16 +139,22 @@ int main(int argc, char** argv) {
     }
     
     // Deallocate memory
-    mpc_cleanup(4, Operator, Number, Expr, Lispr);
+    mpc_cleanup(5, Operator, Integer, Double, Expr, Lispr);
     return 0;
 }
 
 lval eval(mpc_ast_t* t) {
     // if it's a number, return it directly
-    if (strstr(t->tag, "number")) {
+    if (strstr(t->tag, "integer")) {
 		errno = 0;
 		long x = strtol(t->contents, NULL, 10);
-        return errno != ERANGE ? lval_num(x) : lval_err(LERR_BAD_NUM);
+        return errno != ERANGE ? lval_int(x) : lval_err(LERR_BAD_NUM);
+    }
+    
+    if (strstr(t->tag, "double")) {
+        errno = 0;
+        double x = strtod(t->contents, NULL);
+        return errno != ERANGE ? lval_dbl(x) : lval_err(LERR_BAD_NUM);
     }
     
     // the operator is always second child
@@ -151,25 +173,146 @@ lval eval(mpc_ast_t* t) {
 lval eval_op(lval x, char* op, lval y) {
 	if (x.type == LVAL_ERR) return x;
 	if (y.type == LVAL_ERR) return y;
+    
+    int type;
+    if (x.type == LVAL_INT && y.type == LVAL_DBL)
+        type = FIRST_INT;
+    else if (x.type == LVAL_DBL && y.type == LVAL_INT)
+        type = FIRST_DBL;
+    else if (x.type == LVAL_INT && y.type == LVAL_INT)
+        type = TWO_INTS;
+    else if (x.type == LVAL_DBL && y.type == LVAL_DBL)
+        type = TWO_DBLS;
 	
-    if (strcmp(op, "+") == 0) return lval_num(x.num + y.num);
-    if (strcmp(op, "-") == 0) return lval_num(x.num - y.num);
-    if (strcmp(op, "*") == 0) return lval_num(x.num * y.num);
+    if (strcmp(op, "+") == 0) {
+        switch (type) {
+            case FIRST_INT:
+                return lval_dbl(x.num + y.dbl);
+            case FIRST_DBL:
+                return lval_dbl(x.dbl + y.num);
+            case TWO_INTS:
+                return lval_int(x.num + y.num);
+            case TWO_DBLS:
+                return lval_dbl(x.dbl + y.dbl);
+        }
+    }
+    
+    if (strcmp(op, "-") == 0) {
+        switch (type) {
+            case FIRST_INT:
+                return lval_dbl(x.num - y.dbl);
+            case FIRST_DBL:
+                return lval_dbl(x.dbl - y.num);
+            case TWO_INTS:
+                return lval_int(x.num - y.num);
+            case TWO_DBLS:
+                return lval_dbl(x.dbl - y.dbl);
+        }
+    }
+    
+    if (strcmp(op, "*") == 0) {
+        switch (type) {
+            case FIRST_INT:
+                return lval_dbl(x.num * y.dbl);
+            case FIRST_DBL:
+                return lval_dbl(x.dbl * y.num);
+            case TWO_INTS:
+                return lval_int(x.num * y.num);
+            case TWO_DBLS:
+                return lval_dbl(x.dbl * y.dbl);
+        }
+    }
+    
     if (strcmp(op, "/") == 0) {
-		return y.num == 0 ? lval_err(LERR_DIV_ZERO) : lval_num(x.num / y.num);
+        switch (type) {
+            case FIRST_INT:
+                if (y.dbl == 0)
+                    return lval_err(LERR_DIV_ZERO);
+                return lval_dbl(x.num / y.dbl);
+            case FIRST_DBL:
+                if (y.num == 0)
+                    return lval_err(LERR_DIV_ZERO);
+                return lval_dbl(x.dbl / y.num);
+            case TWO_INTS:
+                if (y.num == 0)
+                    return lval_err(LERR_DIV_ZERO);
+                return lval_int(x.num / y.num);
+            case TWO_DBLS:
+                if (y.dbl == 0)
+                    return lval_err(LERR_DIV_ZERO);
+                return lval_dbl(x.dbl / y.dbl);
+        }
 	}
+    
     if (strcmp(op, "%") == 0) {
-		return y.num == 0 ? lval_err(LERR_DIV_ZERO) : lval_num(x.num % y.num);
+        switch (type) {
+            case FIRST_INT:
+                if (y.dbl == 0)
+                    return lval_err(LERR_DIV_ZERO);
+                return lval_dbl(fmod(x.num, y.dbl));
+            case FIRST_DBL:
+                if (y.num == 0)
+                    return lval_err(LERR_DIV_ZERO);
+                return lval_dbl(fmod(x.dbl, y.num));
+            case TWO_INTS:
+                if (y.num == 0)
+                    return lval_err(LERR_DIV_ZERO);
+                return lval_int(x.num % y.num);
+            case TWO_DBLS:
+                if (y.dbl == 0)
+                    return lval_err(LERR_DIV_ZERO);
+                return lval_dbl(fmod(x.dbl, y.dbl));
+        }
 	}
+    
 	if (strcmp(op, "^") == 0) {
-		long result = 1;
-		for (long i = 0; i < y.num; i++) {
-			result *= x.num;
-		}
-		return lval_num(result);;
+        double dres = 1;
+        long lres = 1;
+        switch (type) {
+            case FIRST_INT:
+                printf("Exponentiation with non-integer exponent not yet supported.\n");
+                return lval_err(LERR_BAD_OP);
+            case FIRST_DBL:
+                for (long i = 0; i < y.num; i++) {
+                    dres *= x.dbl;
+                }
+                return lval_dbl(dres);
+            case TWO_INTS:
+                for (long i = 0; i < y.num; i++) {
+                    lres *= x.num;
+                }
+                return lval_int(lres);
+            case TWO_DBLS:
+                printf("Exponentiation with non-integer exponent not yet supported.\n");
+                return lval_err(LERR_BAD_OP);
+        }
 	}
-	if (strcmp(op, "min") == 0) return x.num > y.num ? y : x;
-	if (strcmp(op, "max") == 0) return x.num > y.num ? x : y;
+    
+	if (strcmp(op, "min") == 0) {
+        switch (type) {
+            case FIRST_INT:
+                return x.num < y.dbl ? x : y;
+            case FIRST_DBL:
+                return x.dbl < y.num ? x : y;
+            case TWO_INTS:
+                return x.num < y.num ? x : y;
+            case TWO_DBLS:
+                return x.dbl < y.dbl ? x : y;
+        }
+    }
+    
+	if (strcmp(op, "max") == 0) {
+        switch (type) {
+            case FIRST_INT:
+                return x.num > y.dbl ? x : y;
+            case FIRST_DBL:
+                return x.dbl > y.num ? x : y;
+            case TWO_INTS:
+                return x.num > y.num ? x : y;
+            case TWO_DBLS:
+                return x.dbl > y.dbl ? x : y;
+        }
+    }
 	
 	return lval_err(LERR_BAD_OP);
 }
