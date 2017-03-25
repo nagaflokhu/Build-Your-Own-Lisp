@@ -110,9 +110,9 @@ int main(int argc, char** argv) {
 		  	\"min\" | \"max\" ; \
           double: /-?[0-9]+[.][0-9]*/; \
           integer: /-?[0-9]+/; \
-          expr: <integer> | <double> | '(' <operator> <expr>+ ')'; \
+          expr: <double> | <integer> | '(' <operator> <expr>+ ')'; \
           lispr: /^/ <operator> <expr>+ /$/; \
-        ", Operator, Integer, Double, Expr, Lispr);
+        ", Operator, Double, Integer, Expr, Lispr);
     
     puts("Lispr Version 0.0.0.0.1");
     puts("Press ctrl+c to Exit\n");
