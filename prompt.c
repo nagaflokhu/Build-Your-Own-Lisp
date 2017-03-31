@@ -87,6 +87,7 @@ lval* builtin_eval(lval*);
 lval* builtin_join(lval*);
 lval* lval_join(lval*,lval*);
 lval* builtin(lval*, char*);
+lval* builtin_cons(lval*);
 
 int main(int argc, char** argv) {
     
@@ -107,7 +108,7 @@ int main(int argc, char** argv) {
           double: /-?[0-9]+[.][0-9]*/; \
           symbol: \"list\" | \"head\" | \"tail\" | \"join\" | \
             \"eval\" | '+' | '/' | '*' | '-' | '%' | '^' | \
-		  	\"min\" | \"max\"; \
+		  	\"min\" | \"max\" | \"cons\"; \
           sexpr: '(' <expr>* ')'; \
           qexpr: '{' <expr>* '}'; \
           expr: <number> | <symbol> | <sexpr> | <qexpr>; \
@@ -642,12 +643,30 @@ lval* lval_join(lval* x, lval* y) {
     return x;
 }
 
+lval* builtin_cons(lval* a) {
+    // First argument should be a value and second should be a qexpr
+    LASSERT(a, a->cell[0]->type == LVAL_NUM,
+            "Function 'cons' requires a value!");
+    LASSERT(a, a->cell[1]->type == LVAL_QEXPR,
+            "Function 'cons' requires a qexpr!");
+    
+    lval* x = lval_qexpr();
+    x = lval_add(x, lval_pop(a,0));
+    while (a->count) {
+        x = lval_join(x, lval_pop(a,0));
+    }
+    
+    lval_del(a);
+    return x;
+}
+
 lval* builtin(lval* a, char* func) {
     if (strcmp("list", func) == 0) return builtin_list(a);
     if (strcmp("head", func) == 0) return builtin_head(a);
     if (strcmp("tail", func) == 0) return builtin_tail(a);
     if (strcmp("join", func) == 0) return builtin_join(a);
     if (strcmp("eval", func) == 0) return builtin_eval(a);
+    if (strcmp("cons", func) == 0) return builtin_cons(a);
     if (strstr("+-*/%^maxmin", func)) return builtin_op(a, func);
     lval_del(a);
     return lval_err("Unknown function!");
