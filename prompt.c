@@ -35,7 +35,8 @@ void add_history(char* unused) {}
 
 // lvals represent the result of evaluating a lisp
 // expression
-enum {LVAL_ERR, LVAL_NUM, LVAL_SYM, LVAL_SEXPR, LVAL_QEXPR};
+enum {LVAL_ERR, LVAL_NUM, LVAL_SYM, 
+      LVAL_FUN, LVAL_SEXPR, LVAL_QEXPR};
 enum {LONG, DOUBLE};
 
 // Since lvals can either hold longs or doubles, I'm creating
@@ -49,18 +50,26 @@ typedef struct {
     int type;
 } Num;
 
-typedef struct lval {
+// Forward declaration for types with cyclical dependencies
+struct lval;
+struct lenv;
+typedef struct lval lval;
+typedef struct lenv lenv;
+typedef lval*(*lbuiltin)(lenv*, lval*);
+
+struct lval {
     int type;
 	Num num;
     
     // the error and symbols will be stored as strings
     char* err;
     char* sym;
+    lbuiltin fun;
     
     // counter and pointer to a list of lval pointers
     int count;
     struct lval** cell;
-} lval;
+};
 
 lval* eval(mpc_ast_t*);
 lval* eval_op(lval*, char*, lval*);
@@ -90,6 +99,8 @@ lval* builtin(lval*, char*);
 lval* builtin_cons(lval*);
 lval* len(lval*);
 lval* init(lval*);
+lval* lval_fun(lbuiltin);
+lval* lval_copy(lval*);
 
 int main(int argc, char** argv) {
     
@@ -108,9 +119,7 @@ int main(int argc, char** argv) {
           number: <double> | <long>; \
           long: /-?[0-9]+/; \
           double: /-?[0-9]+[.][0-9]*/; \
-          symbol: \"list\" | \"head\" | \"tail\" | \"join\" | \
-            \"eval\" | '+' | '/' | '*' | '-' | '%' | '^' | \
-		  	\"min\" | \"max\" | \"cons\" | \"len\" | \"init\"; \
+          symbol: /[a-zA-Z0-9_+\\-*\\/\\\\=<>!&]+/; \
           sexpr: '(' <expr>* ')'; \
           qexpr: '{' <expr>* '}'; \
           expr: <number> | <symbol> | <sexpr> | <qexpr>; \
@@ -166,7 +175,7 @@ lval* lval_sym(char* s) {
     lval* v = malloc(sizeof(lval));
     v->type = LVAL_SYM;
     v->sym = malloc(strlen(s)+1);
-    v->sym = s;
+    strcpy(v->sym, s);
     return v;
 }
 
@@ -190,6 +199,7 @@ void lval_del(lval* v) {
     
     switch (v->type) {
         case LVAL_NUM: break;
+        case LVAL_FUN: break;
         case LVAL_ERR: free(v->err); break;
         case LVAL_SYM: free(v->sym); break;
         case LVAL_SEXPR:
@@ -298,6 +308,9 @@ void lval_print(lval* v) {
             break;
         case LVAL_QEXPR:
             lval_expr_print(v, '{', '}');
+            break;
+        case LVAL_FUN:
+            printf("<function>");
             break;
 	}
 }
@@ -696,4 +709,11 @@ lval* builtin(lval* a, char* func) {
     if (strstr("+-*/%^maxmin", func)) return builtin_op(a, func);
     lval_del(a);
     return lval_err("Unknown function!");
+}
+
+lval* lval_fun(lbuiltin func) {
+    lval* v = malloc(sizeof(lval));
+    v->fun = func;
+    v->type = LVAL_FUN;
+    return v;
 }
