@@ -31,7 +31,7 @@ void add_history(char* unused) {}
 #define CHECK_NUM(arg, num, err)\
     LASSERT(arg, arg->count == num, err)
 #define CHECK_EMPTY(arg, err)\
-    LASSERT(arg, arg->cell[0]->count == 0, err)
+    LASSERT(arg, arg->cell[0]->count != 0, err)
 
 // lvals represent the result of evaluating a lisp
 // expression
@@ -88,6 +88,8 @@ lval* builtin_join(lval*);
 lval* lval_join(lval*,lval*);
 lval* builtin(lval*, char*);
 lval* builtin_cons(lval*);
+lval* len(lval*);
+lval* init(lval*);
 
 int main(int argc, char** argv) {
     
@@ -108,7 +110,7 @@ int main(int argc, char** argv) {
           double: /-?[0-9]+[.][0-9]*/; \
           symbol: \"list\" | \"head\" | \"tail\" | \"join\" | \
             \"eval\" | '+' | '/' | '*' | '-' | '%' | '^' | \
-		  	\"min\" | \"max\" | \"cons\"; \
+		  	\"min\" | \"max\" | \"cons\" | \"len\" | \"init\"; \
           sexpr: '(' <expr>* ')'; \
           qexpr: '{' <expr>* '}'; \
           expr: <number> | <symbol> | <sexpr> | <qexpr>; \
@@ -660,6 +662,28 @@ lval* builtin_cons(lval* a) {
     return x;
 }
 
+lval* builtin_len(lval* a) {
+    CHECK_NUM(a, 1, "Function 'len' passed too many arguments!");
+    LASSERT(a, a->cell[0]->type == LVAL_QEXPR,
+            "Function 'len' requires a qexpr!");
+    
+    Num n;
+    n.type = LONG;
+    n.l = a->cell[0]->count;
+    return lval_num(n);
+}
+
+lval* builtin_init(lval* a) {
+    CHECK_NUM(a, 1, "Function 'init' passed too many arguments!");
+    LASSERT(a, a->cell[0]->type == LVAL_QEXPR,
+            "Function 'init' requires a qexpr!");
+    CHECK_EMPTY(a, "Function 'init' passed {}!");
+    
+    lval* x = lval_take(a,0);
+    lval_del(lval_pop(x, x->count-1));
+    return x;
+}
+
 lval* builtin(lval* a, char* func) {
     if (strcmp("list", func) == 0) return builtin_list(a);
     if (strcmp("head", func) == 0) return builtin_head(a);
@@ -667,6 +691,8 @@ lval* builtin(lval* a, char* func) {
     if (strcmp("join", func) == 0) return builtin_join(a);
     if (strcmp("eval", func) == 0) return builtin_eval(a);
     if (strcmp("cons", func) == 0) return builtin_cons(a);
+    if (strcmp("len", func) == 0) return builtin_len(a);
+    if (strcmp("init", func) == 0) return builtin_init(a);
     if (strstr("+-*/%^maxmin", func)) return builtin_op(a, func);
     lval_del(a);
     return lval_err("Unknown function!");
