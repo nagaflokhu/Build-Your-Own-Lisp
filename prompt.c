@@ -25,9 +25,17 @@ void add_history(char* unused) {}
 #include <editline/readline.h>
 #endif
 
+// Macro for error checking
+#define LASSERT(args, cond, err)\
+    if(!(cond)) { lval_del(args); return lval_err(err); }
+#define CHECK_NUM(arg, num, err)\
+    LASSERT(arg, arg->count == num, err)
+#define CHECK_EMPTY(arg, err)\
+    LASSERT(arg, arg->cell[0]->count == 0, err)
+
 // lvals represent the result of evaluating a lisp
 // expression
-enum {LVAL_ERR, LVAL_NUM, LVAL_SYM, LVAL_SEXPR};
+enum {LVAL_ERR, LVAL_NUM, LVAL_SYM, LVAL_SEXPR, LVAL_QEXPR};
 enum {LONG, DOUBLE};
 
 // Since lvals can either hold longs or doubles, I'm creating
@@ -60,6 +68,7 @@ lval* lval_num(Num);
 lval* lval_err(char*);
 lval* lval_sym(char*);
 lval* lval_sexpr(void);
+lval* lval_qexpr(void);
 void lval_del(lval*);
 lval* lval_read_num(mpc_ast_t*);
 lval* lval_read(mpc_ast_t*);
@@ -72,6 +81,12 @@ lval* lval_eval(lval*);
 lval* lval_pop(lval*, int);
 lval* lval_take(lval*, int);
 lval* builtin_op(lval*, char*);
+lval* builtin_head(lval*);
+lval* builtin_list(lval*);
+lval* builtin_eval(lval*);
+lval* builtin_join(lval*);
+lval* lval_join(lval*,lval*);
+lval* builtin(lval*, char*);
 
 int main(int argc, char** argv) {
     
@@ -81,6 +96,7 @@ int main(int argc, char** argv) {
     mpc_parser_t* Double = mpc_new("double");
     mpc_parser_t* Symbol = mpc_new("symbol");
     mpc_parser_t* Sexpr = mpc_new("sexpr");
+    mpc_parser_t* Qexpr = mpc_new("qexpr");
     mpc_parser_t* Expr = mpc_new("expr");
     mpc_parser_t* Lispr = mpc_new("lispr");
     
@@ -89,12 +105,14 @@ int main(int argc, char** argv) {
           number: <double> | <long>; \
           long: /-?[0-9]+/; \
           double: /-?[0-9]+[.][0-9]*/; \
-          symbol: '+' | '/' | '*' | '-' | '%' | '^' | \
+          symbol: \"list\" | \"head\" | \"tail\" | \"join\" | \
+            \"eval\" | '+' | '/' | '*' | '-' | '%' | '^' | \
 		  	\"min\" | \"max\"; \
           sexpr: '(' <expr>* ')'; \
-          expr: <number> | <symbol> | <sexpr>; \
+          qexpr: '{' <expr>* '}'; \
+          expr: <number> | <symbol> | <sexpr> | <qexpr>; \
           lispr: /^/ <expr>* /$/; \
-        ", Number, Long, Double, Symbol, Sexpr, Expr, Lispr);
+        ", Number, Long, Double, Symbol, Sexpr, Qexpr, Expr, Lispr);
     
     puts("Lispr Version 0.0.0.0.1");
     puts("Press ctrl+c to Exit\n");
@@ -122,7 +140,7 @@ int main(int argc, char** argv) {
     }
     
     // Deallocate memory
-    mpc_cleanup(7, Number, Long, Double, Symbol, Sexpr, Expr, Lispr);
+    mpc_cleanup(8, Number, Long, Double, Symbol, Sexpr, Qexpr, Expr, Lispr);
     return 0;
 }
 
@@ -157,6 +175,14 @@ lval* lval_sexpr(void) {
     return v;
 }
 
+lval* lval_qexpr(void) {
+    lval* v = malloc(sizeof(lval));
+    v->type = LVAL_QEXPR;
+    v->count = 0;
+    v->cell = NULL;
+    return v;
+}
+
 void lval_del(lval* v) {
     
     switch (v->type) {
@@ -164,6 +190,7 @@ void lval_del(lval* v) {
         case LVAL_ERR: free(v->err); break;
         case LVAL_SYM: free(v->sym); break;
         case LVAL_SEXPR:
+        case LVAL_QEXPR:
             for (int i = 0; i < v->count; i++) {
                 lval_del(v->cell[i]);
             }
@@ -210,6 +237,7 @@ lval* lval_read(mpc_ast_t* t) {
     lval* x = NULL;
     if (strcmp(t->tag, ">") == 0) x = lval_sexpr();
     if (strstr(t->tag, "sexpr")) x = lval_sexpr();
+    if (strstr(t->tag, "qexpr")) x = lval_qexpr();
     
     // Fill list with any valid expressions contained within
     for (int i = 0; i < t->children_num; i++) {
@@ -265,6 +293,9 @@ void lval_print(lval* v) {
         case LVAL_SEXPR:
             lval_expr_print(v, '(', ')');
             break;
+        case LVAL_QEXPR:
+            lval_expr_print(v, '{', '}');
+            break;
 	}
 }
 
@@ -297,7 +328,7 @@ lval* lval_eval_sexpr(lval* v) {
     }
     
     // Call builtin with operator
-    lval* result = builtin_op(v, f->sym);
+    lval* result = builtin(v, f->sym);
     lval_del(f);
     return result;
 }
@@ -542,4 +573,82 @@ lval* builtin_op(lval* a, char* op) {
     }
     
     lval_del(a); return x;
+}
+
+lval* builtin_head(lval* a) {
+    // Check for error conditions
+    CHECK_NUM(a, 1, "Function 'head' passed too many arguments!");
+    LASSERT(a, a->cell[0]->type == LVAL_QEXPR,
+            "Function 'head' passed incorrect types!");
+    CHECK_EMPTY(a, "Function 'head' passed {}!");
+    
+    lval* v = lval_take(a, 0);
+    
+    // Delete all other element and return v
+    while (v->count > 1) lval_del(lval_pop(v, 1));
+    return v;
+}
+
+lval* builtin_tail(lval* a) {
+    // Check for error conditions
+    CHECK_NUM(a, 1, "Function 'tail' passed too many arguments!");
+    LASSERT(a, a->cell[0]->type == LVAL_QEXPR,
+            "Function 'tail' passed incorrect types!");
+    CHECK_EMPTY(a, "Function 'tail' passed {}!");
+    
+    lval* v = lval_take(a, 0);
+    
+    lval_del(lval_pop(v, 0));
+    return v;
+}
+
+lval* builtin_list(lval* a) {
+    a->type = LVAL_QEXPR;
+    return a;
+}
+
+lval* builtin_eval(lval* a) {
+    CHECK_NUM(a, 1, "Function 'eval' passed too many arguments!");
+    LASSERT(a, a->cell[0]->type == LVAL_QEXPR,
+            "Function 'eval' passed incorrect types!");
+    
+    lval* x = lval_take(a,0);
+    x->type = LVAL_SEXPR;
+    return lval_eval(x);
+}
+
+lval* builtin_join(lval* a) {
+    for (int i = 0; i < a->count; i++) {
+        LASSERT(a, a->cell[i]->type == LVAL_QEXPR,
+                "Function 'join' passed incorrect types!");
+    }
+    
+    lval* x = lval_pop(a,0);
+    while (a->count) {
+        x = lval_join(x, lval_pop(a,0));
+    }
+    
+    lval_del(a);
+    return x;
+}
+
+lval* lval_join(lval* x, lval* y) {
+    // Add each cell in y to x
+    while (y->count) {
+        x = lval_add(x, lval_pop(y,0));
+    }
+    
+    lval_del(y);
+    return x;
+}
+
+lval* builtin(lval* a, char* func) {
+    if (strcmp("list", func) == 0) return builtin_list(a);
+    if (strcmp("head", func) == 0) return builtin_head(a);
+    if (strcmp("tail", func) == 0) return builtin_tail(a);
+    if (strcmp("join", func) == 0) return builtin_join(a);
+    if (strcmp("eval", func) == 0) return builtin_eval(a);
+    if (strstr("+-*/%^maxmin", func)) return builtin_op(a, func);
+    lval_del(a);
+    return lval_err("Unknown function!");
 }
