@@ -28,7 +28,7 @@ void add_history(char* unused) {}
 // Macro for error checking
 #define LASSERT(args, cond, err)\
     if(!(cond)) { lval_del(args); return lval_err(err); }
-#define CHECK_NUM(arg, num, err)\
+#define CHECK_COUNT(arg, num, err)\
     LASSERT(arg, arg->count == num, err)
 #define CHECK_EMPTY(arg, err)\
     LASSERT(arg, arg->cell[0]->count != 0, err)
@@ -95,15 +95,15 @@ lval* lval_eval_sexpr(lenv*, lval*);
 lval* lval_eval(lenv*, lval*);
 lval* lval_pop(lval*, int);
 lval* lval_take(lval*, int);
-lval* builtin_op(lval*, char*);
-lval* builtin_head(lval*);
-lval* builtin_list(lval*);
+lval* builtin_head(lenv*, lval*);
+lval* builtin_tail(lenv*, lval*);
+lval* builtin_list(lenv*, lval*);
 lval* builtin_eval(lenv*, lval*);
-lval* builtin_join(lval*);
+lval* builtin_join(lenv*, lval*);
 lval* lval_join(lval*,lval*);
-lval* builtin_cons(lval*);
-lval* len(lval*);
-lval* init(lval*);
+lval* builtin_cons(lenv*, lval*);
+lval* builtin_len(lenv*, lval*);
+lval* builtin_init(lenv*, lval*);
 lval* lval_fun(lbuiltin);
 lval* lval_copy(lval*);
 lenv* lenv_new(void);
@@ -114,6 +114,11 @@ int valid_math_input(lval*);
 lval* builtin_add(lenv*, lval*);
 void lenv_add_builtin(lenv*, char*, lbuiltin);
 void lenv_add_builtins(lenv*);
+lval* builtin_add(lenv*, lval*);
+lval* builtin_sub(lenv*, lval*);
+lval* builtin_mul(lenv*, lval*);
+lval* builtin_div(lenv*, lval*);
+lval* builtin_mod(lenv*, lval*);
 
 int main(int argc, char** argv) {
     
@@ -132,7 +137,7 @@ int main(int argc, char** argv) {
           number: <double> | <long>; \
           long: /-?[0-9]+/; \
           double: /-?[0-9]+[.][0-9]*/; \
-          symbol: /[a-zA-Z0-9_+\\-*\\/\\\\=<>!&]+/; \
+          symbol: /[a-zA-Z0-9_+\\-*\\/\\\\=<>!&%^]+/; \
           sexpr: '(' <expr>* ')'; \
           qexpr: '{' <expr>* '}'; \
           expr: <number> | <symbol> | <sexpr> | <qexpr>; \
@@ -168,6 +173,7 @@ int main(int argc, char** argv) {
     }
     
     // Deallocate memory
+    lenv_del(e);
     mpc_cleanup(8, Number, Long, Double, Symbol, Sexpr, Qexpr, Expr, Lispr);
     return 0;
 }
@@ -397,222 +403,9 @@ lval* lval_take(lval* v, int i) {
     return x;
 }
 
-lval* builtin_op(lval* a, char* op) {
-    // Ensure all arguments are numbers
-    for (int i = 0; i < a->count; i++) {
-        if (a->cell[i]->type != LVAL_NUM) {
-            lval_del(a);
-            return lval_err("Cannot operate on a non-number!");
-        }
-    }
-    
-    // Pop the first element
-    lval* x = lval_pop(a, 0);
-    
-    // If we are dealing with a subtraction with a single argument, perform unary negation
-    if ((strcmp(op, "-") == 0) && a->count == 0) {
-        if (x->num.type == LONG)
-            x->num.l = -x->num.l;
-        else if (x->num.type == DOUBLE)
-            x->num.d = -x->num.d;
-        lval_del(a);
-        return x;
-    }
-    
-    // While there are still arguments
-    while (a->count > 0) {
-        // Pop the next element
-        lval* y = lval_pop(a, 0);
-        
-        if (strcmp(op, "+") == 0) {
-            if (x->num.type == LONG && y->num.type == LONG) {
-                x->num.l += y->num.l;
-            }
-            else if (x->num.type == LONG && y->num.type == DOUBLE) {
-                x->num.type = DOUBLE;
-                x->num.d = x->num.l + y->num.d;
-            }
-            else if (x->num.type == DOUBLE && y->num.type == LONG) {
-                x->num.d += y->num.l;
-            }
-            else if (x->num.type == DOUBLE && y->num.type == DOUBLE) {
-                x->num.d += y->num.d;
-            }
-        }
-
-        if (strcmp(op, "-") == 0) {
-            if (x->num.type == LONG && y->num.type == LONG) {
-                x->num.l -= y->num.l;
-            }
-            else if (x->num.type == LONG && y->num.type == DOUBLE) {
-                x->num.type = DOUBLE;
-                x->num.d = x->num.l - y->num.d;
-            }
-            else if (x->num.type == DOUBLE && y->num.type == LONG) {
-                x->num.d -= y->num.l;
-            }
-            else if (x->num.type == DOUBLE && y->num.type == DOUBLE) {
-                x->num.d -= y->num.d;
-            }
-        }
-
-        if (strcmp(op, "*") == 0) {
-            if (x->num.type == LONG && y->num.type == LONG) {
-                x->num.l *= y->num.l;
-            }
-            else if (x->num.type == LONG && y->num.type == DOUBLE) {
-                x->num.type = DOUBLE;
-                x->num.d = x->num.l * y->num.d;
-            }
-            else if (x->num.type == DOUBLE && y->num.type == LONG) {
-                x->num.d *= y->num.l;
-            }
-            else if (x->num.type == DOUBLE && y->num.type == DOUBLE) {
-                x->num.d *= y->num.d;
-            }
-        }
-
-        if (strcmp(op, "/") == 0) {
-            if (x->num.type == LONG && y->num.type == LONG) {
-                if (y->num.l == 0) {
-                    lval_del(x); lval_del(y);
-                    x = lval_err("Division by zero!");
-                    break;
-                }
-                x->num.l /= y->num.l;
-            }
-            else if (x->num.type == LONG && y->num.type == DOUBLE) {
-                if (y->num.d == 0) {
-                    lval_del(x); lval_del(y);
-                    x = lval_err("Division by zero!");
-                    break;
-                }
-                x->num.type = DOUBLE;
-                x->num.d = x->num.l / y->num.d;
-            }
-            else if (x->num.type == DOUBLE && y->num.type == LONG) {
-                if (y->num.l == 0) {
-                    lval_del(x); lval_del(y);
-                    x = lval_err("Division by zero!");
-                    break;
-                }
-                x->num.d /= y->num.l;
-            }
-            else if (x->num.type == DOUBLE && y->num.type == DOUBLE) {
-                if (y->num.d == 0) {
-                    lval_del(x); lval_del(y);
-                    x = lval_err("Division by zero!");
-                    break;
-                }
-                x->num.d /= y->num.d;
-            }
-        }
-
-        if (strcmp(op, "%") == 0) {
-            if (x->num.type == LONG && y->num.type == LONG) {
-                if (y->num.l == 0) {
-                    lval_del(x); lval_del(y);
-                    x = lval_err("Division by zero!");
-                    break;
-                }
-                x->num.l %= y->num.l;
-            }
-            else if (x->num.type == LONG && y->num.type == DOUBLE) {
-                if (y->num.d == 0) {
-                    lval_del(x); lval_del(y);
-                    x = lval_err("Division by zero!");
-                    break;
-                }
-                x->num.type = DOUBLE;
-                x->num.d = fmod(x->num.l, y->num.d);
-            }
-            else if (x->num.type == DOUBLE && y->num.type == LONG) {
-                if (y->num.l == 0) {
-                    lval_del(x); lval_del(y);
-                    x = lval_err("Division by zero!");
-                    break;
-                }
-                x->num.d = fmod(x->num.d, y->num.l);
-            }
-            else if (x->num.type == DOUBLE && y->num.type == DOUBLE) {
-                if (y->num.d == 0) {
-                    lval_del(x); lval_del(y);
-                    x = lval_err("Division by zero!");
-                    break;
-                }
-                x->num.d = fmod(x->num.d, y->num.d);
-            }
-        }
-
-        if (strcmp(op, "^") == 0) {
-            if (y->num.type == DOUBLE) {
-                lval_del(x); lval_del(y);
-                x = lval_err("Exponentiation with non-integer exponent not yet supported.");
-                break;
-            }
-
-            if (y->num.l < 0) {
-                lval_del(x); lval_del(y);
-                x = lval_err("Exponentiation with negative exponent not yet supported.");
-                break;
-            }
-
-            Num n;
-            switch(x->num.type) {
-                case LONG:
-                    n.type = LONG;
-                    n.l = 1;
-                    for (long i = 0; i < y->num.l; i++) {
-                        n.l *= x->num.l;
-                    }
-                    x->num = n;
-                    break;
-                case DOUBLE:
-                    n.type = DOUBLE;
-                    n.d = 1;
-                    for (long i = 0; i < y->num.l; i++) {
-                        n.d *= x->num.d;
-                    }
-                    x->num = n;
-                    break;
-            }
-        }
-
-        if (strcmp(op, "min") == 0) {
-            if (x->num.type == LONG && y->num.type == LONG)
-                x->num.l = x->num.l < y->num.l ? x->num.l : y->num.l;
-            else if (x->num.type == LONG && y->num.type == DOUBLE) {
-                x->num.type = DOUBLE;
-                x->num.d = x->num.l < y->num.d ? x->num.l : y->num.d;
-            }
-            else if (x->num.type == DOUBLE && y->num.type == LONG)
-                x->num.d = x->num.d < y->num.l ? x->num.d : y->num.l;
-            else if (x->num.type == DOUBLE && y->num.type == DOUBLE)
-                x->num.d = x->num.d < y->num.d ? x->num.d : y->num.d;
-        }
-
-        if (strcmp(op, "max") == 0) {
-            if (x->num.type == LONG && y->num.type == LONG)
-                x->num.l = x->num.l < y->num.l ? y->num.l : x->num.l;
-            else if (x->num.type == LONG && y->num.type == DOUBLE) {
-                x->num.type = DOUBLE;
-                x->num.l = x->num.l < y->num.d ? y->num.d : x->num.l;
-            }
-            else if (x->num.type == DOUBLE && y->num.type == LONG)
-                x->num.d = x->num.d < y->num.l ? y->num.l : x->num.d;
-            else if (x->num.type == DOUBLE && y->num.type == DOUBLE)
-                x->num.d = x->num.d < y->num.d ? y->num.d : x->num.d;
-        }
-        
-        lval_del(y);
-    }
-    
-    lval_del(a); return x;
-}
-
-lval* builtin_head(lval* a) {
+lval* builtin_head(lenv* e, lval* a) {
     // Check for error conditions
-    CHECK_NUM(a, 1, "Function 'head' passed too many arguments!");
+    CHECK_COUNT(a, 1, "Function 'head' passed too many arguments!");
     LASSERT(a, a->cell[0]->type == LVAL_QEXPR,
             "Function 'head' passed incorrect types!");
     CHECK_EMPTY(a, "Function 'head' passed {}!");
@@ -624,9 +417,9 @@ lval* builtin_head(lval* a) {
     return v;
 }
 
-lval* builtin_tail(lval* a) {
+lval* builtin_tail(lenv* e, lval* a) {
     // Check for error conditions
-    CHECK_NUM(a, 1, "Function 'tail' passed too many arguments!");
+    CHECK_COUNT(a, 1, "Function 'tail' passed too many arguments!");
     LASSERT(a, a->cell[0]->type == LVAL_QEXPR,
             "Function 'tail' passed incorrect types!");
     CHECK_EMPTY(a, "Function 'tail' passed {}!");
@@ -637,13 +430,13 @@ lval* builtin_tail(lval* a) {
     return v;
 }
 
-lval* builtin_list(lval* a) {
+lval* builtin_list(lenv* e, lval* a) {
     a->type = LVAL_QEXPR;
     return a;
 }
 
 lval* builtin_eval(lenv* e, lval* a) {
-    CHECK_NUM(a, 1, "Function 'eval' passed too many arguments!");
+    CHECK_COUNT(a, 1, "Function 'eval' passed too many arguments!");
     LASSERT(a, a->cell[0]->type == LVAL_QEXPR,
             "Function 'eval' passed incorrect types!");
     
@@ -652,7 +445,7 @@ lval* builtin_eval(lenv* e, lval* a) {
     return lval_eval(e,x);
 }
 
-lval* builtin_join(lval* a) {
+lval* builtin_join(lenv* e, lval* a) {
     for (int i = 0; i < a->count; i++) {
         LASSERT(a, a->cell[i]->type == LVAL_QEXPR,
                 "Function 'join' passed incorrect types!");
@@ -677,7 +470,7 @@ lval* lval_join(lval* x, lval* y) {
     return x;
 }
 
-lval* builtin_cons(lval* a) {
+lval* builtin_cons(lenv* e, lval* a) {
     // First argument should be a value and second should be a qexpr
     LASSERT(a, a->cell[0]->type == LVAL_NUM,
             "Function 'cons' requires a value!");
@@ -694,8 +487,8 @@ lval* builtin_cons(lval* a) {
     return x;
 }
 
-lval* builtin_len(lval* a) {
-    CHECK_NUM(a, 1, "Function 'len' passed too many arguments!");
+lval* builtin_len(lenv* e, lval* a) {
+    CHECK_COUNT(a, 1, "Function 'len' passed too many arguments!");
     LASSERT(a, a->cell[0]->type == LVAL_QEXPR,
             "Function 'len' requires a qexpr!");
     
@@ -705,8 +498,8 @@ lval* builtin_len(lval* a) {
     return lval_num(n);
 }
 
-lval* builtin_init(lval* a) {
-    CHECK_NUM(a, 1, "Function 'init' passed too many arguments!");
+lval* builtin_init(lenv* e, lval* a) {
+    CHECK_COUNT(a, 1, "Function 'init' passed too many arguments!");
     LASSERT(a, a->cell[0]->type == LVAL_QEXPR,
             "Function 'init' requires a qexpr!");
     CHECK_EMPTY(a, "Function 'init' passed {}!");
@@ -806,10 +599,7 @@ int valid_math_input(lval* v) {
 }
 
 lval* builtin_add(lenv* e, lval* a) {
-    if (!valid_math_input(a)) {
-        lval_del(a);
-        return lval_err("'+' needs all numeric inputs");
-    }
+    LASSERT(a, valid_math_input(a), "'+' requires all numerical inputs");
     lval* x = lval_pop(a,0);
     
     while (a->count) {
@@ -837,10 +627,7 @@ lval* builtin_add(lenv* e, lval* a) {
 }
 
 lval* builtin_sub(lenv* e, lval* a) {
-    if (!valid_math_input(a)) {
-        lval_del(a);
-        return lval_err("'-' needs all numeric inputs");
-    }
+    LASSERT(a, valid_math_input(a), "'-' requires all numerical inputs");
     lval* x = lval_pop(a,0);
     
     if (a->count == 0) {
@@ -879,11 +666,7 @@ lval* builtin_sub(lenv* e, lval* a) {
 }
 
 lval* builtin_mul(lenv* e, lval* a) {
-    if (!valid_math_input(a)) {
-        lval_del(a);
-        return lval_err("'*' requires all numeric inputs");
-    }
-    
+    LASSERT(a, valid_math_input(a), "'*' requires all numerical inputs");
     lval* x = lval_pop(a,0);
     
     while(a->count) {
@@ -912,6 +695,161 @@ lval* builtin_mul(lenv* e, lval* a) {
     lval_del(a); return x;
 }
 
+lval* builtin_div(lenv* e, lval* a) {
+    LASSERT(a, valid_math_input(a), "'/' requires all numerical inputs");
+    lval* x = lval_pop(a,0);
+    
+    while (a->count) {
+        lval* y = lval_pop(a,0);
+        
+        switch (x->num.type) {
+            case LONG:
+                switch (y->num.type) {
+                    case LONG:
+                        if (y->num.l == 0) {
+                            lval_del(x); lval_del(y);
+                            return lval_err("division by zero");
+                        }
+                        x->num.l /= y->num.l;
+                        break;
+                    case DOUBLE:
+                        if (y->num.d == 0) {
+                            lval_del(x); lval_del(y);
+                            return lval_err("division by zero");
+                        }
+                        x->num.type = DOUBLE;
+                        x->num.d = x->num.l / y->num.d;
+                        break;
+                }
+                break;
+            case DOUBLE:
+                switch (y->num.type) {
+                    case LONG:
+                        if (y->num.l == 0) {
+                            lval_del(x); lval_del(y);
+                            return lval_err("division by zero");
+                        }
+                        x->num.d /= y->num.l;
+                        break;
+                    case DOUBLE:
+                        if (y->num.d == 0) {
+                            lval_del(x); lval_del(y);
+                            return lval_err("division by zero");
+                        }
+                        x->num.d /= y->num.d;
+                        break;
+                }
+                break;
+        }
+        
+        lval_del(y);
+    }
+    
+    lval_del(a); return x;
+}
+
+lval* builtin_mod(lenv* e, lval* a) {
+    LASSERT(a, valid_math_input(a), "'%' requires all numerical inputs");
+    lval* x = lval_pop(a,0);
+    
+    while (a->count) {
+        lval* y = lval_pop(a,0);
+        
+        switch (x->num.type) {
+            case LONG:
+                switch (y->num.type) {
+                    case LONG:
+                        if (y->num.l == 0) {
+                            lval_del(x); lval_del(y);
+                            return lval_err("division by zero");
+                        }
+                        x->num.l %= y->num.l;
+                        break;
+                    case DOUBLE:
+                        if (y->num.d == 0) {
+                            lval_del(x); lval_del(y);
+                            return lval_err("division by zero");
+                        }
+                        x->num.type = DOUBLE;
+                        x->num.d = fmod(x->num.l, y->num.d);
+                        break;
+                }
+                break;
+            case DOUBLE:
+                switch (y->num.type) {
+                    case LONG:
+                        if (y->num.l == 0) {
+                            lval_del(x); lval_del(y);
+                            return lval_err("division by zero");
+                        }
+                        x->num.d = fmod(x->num.d, y->num.l);
+                        break;
+                    case DOUBLE:
+                        if (y->num.d == 0) {
+                            lval_del(x); lval_del(y);
+                            return lval_err("division by zero");
+                        }
+                        x->num.d = fmod(x->num.d, y->num.d);
+                        break;
+                }
+                break;
+        }
+        
+        lval_del(y);
+    }
+    
+    lval_del(a); return x;
+}
+
+lval* builtin_exp(lenv* e, lval* a) {
+    LASSERT(a, valid_math_input(a), "'^' requires all numerical inputs");
+    lval* x = lval_pop(a,0);
+    
+    while (a->count) {
+        lval* y = lval_pop(a,0);
+        
+        if (y->num.type == DOUBLE) {
+            lval_del(x); lval_del(y);
+            return lval_err("exponentiation by non-integer not supported yet");
+        }
+        
+        if (y->num.l < 0) {
+            lval_del(x); lval_del(y);
+            return lval_err("exponentiation by negative exponent not supported yet");
+        }
+        
+        Num n;
+        long l;
+        double d;
+        switch (x->num.type) {
+            case LONG:
+                l = 1;
+                for (long i = 0; i < y->num.l; i++) {
+                    l *= x->num.l;
+                }
+                n.type = LONG;
+                n.l = l;
+                lval_del(x);
+                x = lval_num(n);
+                break;
+            case DOUBLE:
+                d = 1;
+                for (long i = 0; i < y->num.l; i++) {
+                    d *= x->num.d;
+                }
+                n.type = DOUBLE;
+                n.d = d;
+                lval_del(x);
+                x = lval_num(n);
+                break;
+        }
+        
+        lval_del(y);
+    }
+    
+    lval_del(a); return x;
+}
+
 void lenv_add_builtin(lenv* e, char* name, lbuiltin func) {
     lval* k = lval_sym(name);
     lval* v = lval_fun(func);
@@ -923,4 +861,16 @@ void lenv_add_builtins(lenv* e) {
     lenv_add_builtin(e, "+", builtin_add);
     lenv_add_builtin(e, "-", builtin_sub);
     lenv_add_builtin(e, "*", builtin_mul);
+    lenv_add_builtin(e, "/", builtin_div);
+    lenv_add_builtin(e, "%", builtin_mod);
+    lenv_add_builtin(e, "^", builtin_exp);
+    
+    lenv_add_builtin(e, "head", builtin_head);
+    lenv_add_builtin(e, "tail", builtin_tail);
+    lenv_add_builtin(e, "list", builtin_list);
+    lenv_add_builtin(e, "eval", builtin_eval);
+    lenv_add_builtin(e, "join", builtin_join);
+    lenv_add_builtin(e, "cons", builtin_cons);
+    lenv_add_builtin(e, "len", builtin_len);
+    lenv_add_builtin(e, "init", builtin_init);
 }
