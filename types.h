@@ -25,15 +25,20 @@ typedef struct lenv lenv;
 typedef lval*(*lbuiltin)(lenv*, lval*);
 
 struct lval {
-    int type;
-	Num num;
-    
-    // the error and symbols will be stored as strings
+		int type;
+
+		// Basic
+		Num num;
     char* err;
     char* sym;
-    lbuiltin fun;
+
+		// Function
+    lbuiltin builtin;
+		lenv* env;
+		lval* formals;
+		lval* body;
     
-    // counter and pointer to a list of lval pointers
+		// Expression
     int count;
     struct lval** cell;
 };

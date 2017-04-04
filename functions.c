@@ -51,7 +51,13 @@ void lval_del(lval* v) {
     
     switch (v->type) {
         case LVAL_NUM: break;
-        case LVAL_FUN: break;
+        case LVAL_FUN:
+						if (!v->builtin) {
+							lenv_del(v->env);
+							lval_del(v->formals);
+							lval_del(v->body);
+						}
+						break;
         case LVAL_ERR: free(v->err); break;
         case LVAL_SYM: free(v->sym); break;
         case LVAL_SEXPR:
@@ -164,7 +170,7 @@ void lval_print(lenv* e, lval* v) {
 						// Search environment for same pointer as v
 						// Print corresponding function name
 						for (int i = 0; i < e->count; i++) {
-							if (e->vals[i]->fun == v->fun) {
+							if (e->vals[i]->builtin == v->builtin) {
 								printf("%s", e->syms[i]);
 							}
 						}
@@ -199,7 +205,7 @@ lval* lval_eval_sexpr(lenv* e, lval* v) {
         return lval_err("first element is not a function");
     }
     
-    lval* result = f->fun(e,v);
+    lval* result = f->builtin(e,v);
     lval_del(f);
     return result;
 }
@@ -337,7 +343,7 @@ lval* builtin_init(lenv* e, lval* a) {
 
 lval* lval_fun(lbuiltin func) {
     lval* v = malloc(sizeof(lval));
-    v->fun = func;
+    v->builtin = func;
     v->type = LVAL_FUN;
     return v;
 }
@@ -347,7 +353,7 @@ lval* lval_copy(lval* v) {
     x->type = v->type;
     
     switch (v->type) {
-        case LVAL_FUN: x->fun = v->fun; break;
+        case LVAL_FUN: x->builtin = v->builtin; break;
         case LVAL_NUM: x->num = v->num; break;
             
         case LVAL_ERR:
@@ -721,6 +727,23 @@ char* ltype_name(int t) {
 		case LVAL_QEXPR: return "q-expression";
 		default: return "Unknown";
 	}
+}
+
+lval* lval_lambda(lval* formals, lval* body) {
+	lval* v = malloc(sizeof(lval));
+	v->type = LVAL_FUN;
+
+	// Set builtin to NULL; this allows us to distinguish between builtin and user-defined
+	// functions
+	v->builtin = NULL;
+
+	// Build new environment
+	v->env = lenv_new();
+
+	// Set formals and body
+	v->formals = formals;
+	v->body = body;
+	return v;
 }
 
 void lenv_add_builtin(lenv* e, char* name, lbuiltin func) {
