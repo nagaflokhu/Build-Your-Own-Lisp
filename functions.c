@@ -123,11 +123,11 @@ lval* lval_add(lval* v, lval* x) {
     return v;
 }
 
-void lval_expr_print(lval* v, char open, char close) {
+void lval_expr_print(lenv* e, lval* v, char open, char close) {
     putchar(open);
     for (int i = 0; i < v->count; i++) {
         // print value contained within
-        lval_print(v->cell[i]);
+        lval_print(e, v->cell[i]);
         
         // print trailing space if not last element
         if (i != (v->count-1))
@@ -136,7 +136,7 @@ void lval_expr_print(lval* v, char open, char close) {
     putchar(close);
 }
 
-void lval_print(lval* v) {
+void lval_print(lenv* e, lval* v) {
 	switch (v->type) {
 		case LVAL_NUM:
             switch (v->num.type) {
@@ -155,19 +155,25 @@ void lval_print(lval* v) {
             printf("%s", v->sym);
             break;
         case LVAL_SEXPR:
-            lval_expr_print(v, '(', ')');
+            lval_expr_print(e, v, '(', ')');
             break;
         case LVAL_QEXPR:
-            lval_expr_print(v, '{', '}');
+            lval_expr_print(e, v, '{', '}');
             break;
         case LVAL_FUN:
-            printf("<function>");
+						// Search environment for same pointer as v
+						// Print corresponding function name
+						for (int i = 0; i < e->count; i++) {
+							if (e->vals[i]->fun == v->fun) {
+								printf("%s", e->syms[i]);
+							}
+						}
             break;
 	}
 }
 
-void lval_println(lval* v) {
-	lval_print(v);
+void lval_println(lenv* e, lval* v) {
+	lval_print(e,v);
 	putchar('\n');
 }
 
@@ -680,7 +686,12 @@ lval* builtin_def(lenv* e, lval* a) {
     
     // Make sure everything in qexpr is a symbol
     for (int i = 0; i < syms->count; i++) {
-				CHECK_INPUT_TYPE("def", a, i, LVAL_SYM);
+				CHECK_INPUT_TYPE("def", syms, i, LVAL_SYM);
+				// Part of the ugly implementation of exit: prohibit definition of exit
+				if (strcmp(syms->cell[i]->sym, "exit") == 0) {
+					lval_del(a);
+					return lval_err("def of 'exit' is prohibited.");
+				}
    }
     
     // Make sure number of values matches number of symbols
@@ -689,6 +700,10 @@ lval* builtin_def(lenv* e, lval* a) {
            syms->count, a->count-1);
     
     for (int i = 0; i < syms->count; i++) {
+				if (lenv_get(e, syms->cell[i])->type != LVAL_ERR) {
+					lval_del(a);
+					return lval_err("attempting to redefine builtin function.");
+				}
         lenv_put(e, syms->cell[i], a->cell[i+1]);
     }
     

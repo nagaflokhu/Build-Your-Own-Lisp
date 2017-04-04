@@ -57,7 +57,6 @@ int main(int argc, char** argv) {
     lenv* e = lenv_new();
     lenv_add_builtins(e);
     
-    // Infinite loop
     while (1) {
         char* input = readline("lispr> ");
         add_history(input);
@@ -66,8 +65,14 @@ int main(int argc, char** argv) {
         mpc_result_t r;
         if(mpc_parse("<stdin>", input, Lispr, &r)) {
             // On success, evaluate the input
-			lval* x = lval_eval(e, lval_read(r.output));
-            lval_println(x);
+						lval* x = lval_eval(e, lval_read(r.output));
+						// Check if we want to exit
+						// Ugly way of doing this: if "exit" is unbound, we get an error containing "exit"
+						if (strstr(x->err, "exit") == 0) {
+							free(input); mpc_ast_delete(r.output);
+							lval_del(x); break;
+						}
+            lval_println(e,x);
             lval_del(x);
             mpc_ast_delete(r.output);
         }

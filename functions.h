@@ -36,9 +36,9 @@ lval* builtin_def(lenv*, lval*);
 // Utilities
 void lval_del(lval*);
 lval* lval_add(lval*, lval*);
-void lval_expr_print(lval*, char, char);
-void lval_print(lval*);
-void lval_println(lval*);
+void lval_expr_print(lenv* e, lval* v, char open, char close);
+void lval_print(lenv* e, lval* v);
+void lval_println(lenv* e, lval* v);
 lval* lval_eval_sexpr(lenv*, lval*);
 lval* eval_op(lval*, char*, lval*);
 lval* lval_eval(lenv*, lval*);
@@ -48,6 +48,7 @@ lval* lval_copy(lval*);
 lenv* lenv_new(void);
 char* ltype_name(int);
 int valid_math_input(lval*);
+void print_env(lenv* e);
 
 // Environment functions
 void lenv_del(lenv*);
