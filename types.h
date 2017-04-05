@@ -44,6 +44,7 @@ struct lval {
 };
 
 struct lenv {
+		lenv* par;
     int count;
     lval** vals;
     char** syms;

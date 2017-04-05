@@ -33,6 +33,9 @@ lval* builtin_mul(lenv*, lval*);
 lval* builtin_div(lenv*, lval*);
 lval* builtin_mod(lenv*, lval*);
 lval* builtin_def(lenv*, lval*);
+lval* builtin_lambda(lenv*, lval*);
+lval* builtin_put(lenv* e, lval* a);
+lval* builtin_var(lenv*, lval* a, char* func);
 
 // Utilities
 void lval_del(lval*);
@@ -47,9 +50,11 @@ lval* lval_pop(lval*, int);
 lval* lval_take(lval*, int);
 lval* lval_copy(lval*);
 lenv* lenv_new(void);
+lenv* lenv_copy(lenv* e);
 char* ltype_name(int);
 int valid_math_input(lval*);
 void print_env(lenv* e);
+lval* lval_call(lenv* e, lval* f, lval* a);
 
 // Environment functions
 void lenv_del(lenv*);
@@ -57,4 +62,5 @@ lval* lenv_get(lenv*, lval*);
 void lenv_add_builtin(lenv*, char*, lbuiltin);
 void lenv_add_builtins(lenv*);
 void lenv_put(lenv*, lval*, lval*);
+void lenv_def(lenv* e, lval* k, lval* v);
 #endif
