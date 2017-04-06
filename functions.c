@@ -171,8 +171,8 @@ void lval_print(lenv* e, lval* v) {
 				printf("<builtin>");
 			}
 			else {
-				printf("(\\ "); lval_print(f->formals);
-				putchar(' '); lval_print(v->body); putchar(')');
+				printf("(\\ "); lval_print(e,v->formals);
+				putchar(' '); lval_print(e,v->body); putchar(')');
 			}
 		break;
 	}
@@ -184,30 +184,29 @@ void lval_println(lenv* e, lval* v) {
 }
 
 lval* lval_eval_sexpr(lenv* e, lval* v) {
-    
-    // Evaluate children
-    for (int i = 0; i < v->count; i++) {
-        v->cell[i] = lval_eval(e, v->cell[i]);
-        // Error checking
-        if (v->cell[i]->type == LVAL_ERR) return lval_take(v,i);
-    }
-    
-    // Empty expression
-    if (v->count == 0) return v;
-    
-    // Single expression
-    if (v->count == 1) return lval_take(v,0);
-    
-    // Ensure first element is a function
-    lval* f = lval_pop(v,0);
-    if (f->type != LVAL_FUN) {
-        lval_del(v); lval_del(f);
-        return lval_err("first element is not a function");
-    }
-    
-    lval* result = f->builtin(e,v);
-    lval_del(f);
-    return result;
+	// Before evaluating an s-expression, we need to evaluate each of its
+	// components
+	for (int i = 0; i < v->count; i++) {
+		v->cell[i] = lval_eval(e,v->cell[i]);
+		if (v->cell[i]->type == LVAL_ERR) return lval_take(v,i);
+	}
+
+	// If the sexpr is empty, we can just return it
+	if (v->count == 0) return v;
+	// If it has one component, we can evaulate it and return it
+	if (v->count == 1) return lval_eval(e,lval_take(v,0));
+
+	lval* f = lval_pop(v,0);
+	if (f->type != LVAL_FUN) {
+		lval* err = lval_err("S-expression starts with incorrect type. "
+				"Got %s, expected %s.", ltype_name(f->type), ltype_name(LVAL_FUN));
+		lval_del(f); lval_del(v);
+		return err;
+	}
+
+	lval* result = lval_call(e,f,v);
+	lval_del(f);
+	return result;
 }
 
 lval* lval_eval(lenv* e, lval* v) {
@@ -414,9 +413,7 @@ lval* lenv_get(lenv* e, lval* v) {
 		if (e->par) {
 			lenv_get(e->par, v);
 		}
-		else {
-			return lval_err("Unbound symbol '%s'", v->sym);
-		}
+		return lval_err("Unbound symbol '%s'", v->sym);
 }
 
 void lenv_put(lenv* e, lval* k, lval* v) {
@@ -770,7 +767,7 @@ lval* lval_call(lenv* e, lval* f, lval* a) {
 		// Pop next argument from the list
 		lval* val = lval_pop(a,0);
 		// Bind copy into function's environment
-		lval_put(f->env, sym, val);
+		lenv_put(f->env, sym, val);
 		// Delete symbol and value
 		lval_del(sym); lval_del(val);
 	}
@@ -881,4 +878,5 @@ void lenv_add_builtins(lenv* e) {
     
     lenv_add_builtin(e, "def", builtin_def);
 		lenv_add_builtin(e, "=", builtin_put);
+		lenv_add_builtin(e, "\\", builtin_lambda);
 }
