@@ -411,7 +411,7 @@ lval* lenv_get(lenv* e, lval* v) {
     }
 
 		if (e->par) {
-			lenv_get(e->par, v);
+			return lenv_get(e->par, v);
 		}
 		return lval_err("Unbound symbol '%s'", v->sym);
 }
@@ -717,11 +717,6 @@ lval* builtin_var(lenv* e, lval* a, char* func) {
 				LASSERT(a, (syms->cell[i]->type == LVAL_SYM), "Function '%s' cannot "
 						"define non-symbol. Got %s, expected %s.", func,
 						ltype_name(syms->cell[i]->type), ltype_name(LVAL_SYM));
-				// Part of the ugly implementation of exit: prohibit definition of exit
-				if (strcmp(syms->cell[i]->sym, "exit") == 0) {
-					lval_del(a);
-					return lval_err("def of 'exit' is prohibited.");
-				}
    }
     
     // Make sure number of values matches number of symbols
@@ -730,10 +725,12 @@ lval* builtin_var(lenv* e, lval* a, char* func) {
            func, syms->count, a->count-1);
     
     for (int i = 0; i < syms->count; i++) {
-				if (lenv_get(e, syms->cell[i])->type != LVAL_ERR) {
-					lval_del(a);
+				lval* val = lenv_get(e, syms->cell[i]);
+				if (val->type == LVAL_FUN && val->builtin != NULL) {
+					lval_del(a); lval_del(val);
 					return lval_err("attempting to redefine builtin function.");
 				}
+				lval_del(val);
 
 				if (strcmp(func, "def") == 0) {
 					lenv_def(e, syms->cell[i], a->cell[i+1]);
@@ -764,6 +761,22 @@ lval* lval_call(lenv* e, lval* f, lval* a) {
 
 		// Pop first symbol from formals
 		lval* sym = lval_pop(f->formals,0);
+
+		// Adding way to deal with variable number of arguments
+		if (strcmp(sym->sym, "&") == 0) {
+			// Ensure "&" is followed by another symbol
+			if (f->formals->count != 1) {
+				lval_del(a);
+				return lval_err("Function format invalid. Symbol '&' not followed by "
+						"single symbol");
+			}
+
+			// Bind next formal to remaining arguments
+			lval* nsym = lval_pop(f->formals,0);
+			lenv_put(f->env, nsym, builtin_list(e,a));
+			lval_del(sym); lval_del(nsym);
+			break;
+		}
 		// Pop next argument from the list
 		lval* val = lval_pop(a,0);
 		// Bind copy into function's environment
@@ -773,14 +786,31 @@ lval* lval_call(lenv* e, lval* f, lval* a) {
 	}
 
 	lval_del(a);
+	// If '&' remains in forma list, bind to empty list
+	if (f->formals->count > 0 && strcmp(f->formals->cell[0]->sym, "&") == 0) {
+		// Check that '&' is passed with one other symbol
+		if (f->formals->count != 2) {
+			return lval_err("Function format invalid. Symbol '&' not followed by "
+					"single symbol.");
+		}
+
+		// Pop and delete '&' symbol
+		lval_del(lval_pop(f->formals,0));
+
+		// Pop next symbol and create empty list
+		lval* sym = lval_pop(f->formals,0);
+		lval* val = lval_qexpr();
+
+		// Bind to environment and delete
+		lenv_put(f->env, sym, val);
+		lval_del(sym); lval_del(val);
+	}
 	// If all formals have been bound, evaluate function
-	if (f->formals->count == 0) {
+	else if (f->formals->count == 0) {
 		f->env->par = e;
 		return builtin_eval(f->env, lval_add(lval_sexpr(), lval_copy(f->body)));
 	}
-	else {
-		return lval_copy(f);
-	}
+	return lval_copy(f);
 }
 
 char* ltype_name(int t) {
