@@ -938,14 +938,14 @@ lval* builtin_greater_than(lenv* e, lval* a) {
 		case LONG:
 			switch (y.type) {
 				case LONG:
-					if (x.l == y.l) {
+					if (x.l > y.l) {
 						result = TRUE;
 						break;
 					}
 					result = FALSE;
 				break;
 				case DOUBLE:
-					if (x.l == y.d) {
+					if (x.l > y.d) {
 						result = TRUE;
 						break;
 					}
@@ -956,14 +956,14 @@ lval* builtin_greater_than(lenv* e, lval* a) {
 		case DOUBLE:
 			switch (y.type) {
 				case LONG:
-					if (x.d == y.l) {
+					if (x.d > y.l) {
 						result = TRUE;
 						break;
 					}
 					result = FALSE;
 				break;
 				case DOUBLE:
-					if (x.d == y.d) {
+					if (x.d > y.d) {
 						result = TRUE;
 						break;
 					}
@@ -975,6 +975,21 @@ lval* builtin_greater_than(lenv* e, lval* a) {
 
 	lval_del(a);
 	return result == TRUE ? lval_sym("t") : lval_sym("nil");
+}
+
+lval* builtin_smaller_than(lenv* e, lval* a) {
+	CHECK_COUNT("<", a, 2);
+	CHECK_INPUT_TYPE("<", a, 0, LVAL_NUM);
+	CHECK_INPUT_TYPE("<", a, 1, LVAL_NUM);
+
+	// Result of opposite operation
+	lval* opp = builtin_greater_than(e,a);
+	if (strcmp(opp->sym, "t") == 0) {
+		lval_del(opp);
+		return lval_sym("nil");
+	}
+	lval_del(opp);
+	return lval_sym("t");
 }
 
 lenv* lenv_copy(lenv* e) {
@@ -1022,6 +1037,8 @@ void lenv_add_builtins(lenv* e) {
 
 		lenv_add_builtin(e, "eq", builtin_equal);
 		lenv_add_builtin(e, "neq", builtin_not_equal);
+		lenv_add_builtin(e, ">", builtin_greater_than);
+		lenv_add_builtin(e, "<", builtin_smaller_than);
     
     lenv_add_builtin(e, "def", builtin_def);
 		lenv_add_builtin(e, "=", builtin_put);
