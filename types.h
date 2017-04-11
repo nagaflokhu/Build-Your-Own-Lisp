@@ -5,6 +5,7 @@
 enum {LVAL_ERR, LVAL_NUM, LVAL_SYM, 
       LVAL_FUN, LVAL_SEXPR, LVAL_QEXPR};
 enum {LONG, DOUBLE};
+enum {TRUE, FALSE};
 
 // Since lvals can either hold longs or doubles, I'm creating
 // a union type, Num, to holdthe values, which should simplify

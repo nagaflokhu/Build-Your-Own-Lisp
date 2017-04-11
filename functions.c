@@ -863,6 +863,120 @@ lval* builtin_lambda(lenv* e, lval* a) {
 	return lval_lambda(formals, body);
 }
 
+lval* builtin_equal(lenv* e, lval* a) {
+	CHECK_COUNT("eq", a, 2);
+	CHECK_INPUT_TYPE("eq", a, 0, LVAL_NUM);
+	CHECK_INPUT_TYPE("eq", a, 1, LVAL_NUM);
+
+	Num x = a->cell[0]->num;
+	Num y = a->cell[1]->num;
+	switch (x.type) {
+		case LONG:
+			switch (y.type) {
+				case LONG:
+					if (x.l == y.l) {
+						lval_del(a);
+						return lval_sym("t");
+					}
+					lval_del(a);
+					return lval_sym("nil");
+				break;
+				case DOUBLE:
+					if (x.l == y.d) {
+						lval_del(a);
+						return lval_sym("t");
+					}
+					lval_del(a);
+					return lval_sym("nil");
+				break;
+			}
+		break;
+		case DOUBLE:
+			switch (y.type) {
+				case LONG:
+					if (x.d == y.l) {
+						lval_del(a);
+						return lval_sym("t");
+					}
+					lval_del(a);
+					return lval_sym("nil");
+				break;
+				case DOUBLE:
+					if (x.d == y.d) {
+						lval_del(a);
+						return lval_sym("t");
+					}
+					lval_del(a);
+					return lval_sym("nil");
+				break;
+			}
+		break;
+	}
+}
+
+lval* builtin_not_equal(lenv* e, lval* a) {
+	CHECK_COUNT("neq", a, 2);
+	CHECK_INPUT_TYPE("neq", a, 0, LVAL_NUM);
+	CHECK_INPUT_TYPE("neq", a, 1, LVAL_NUM);
+
+	if (strcmp(builtin_equal(e,a)->sym, "t") == 0) {
+		lval_del(a); return lval_sym("nil");
+	}
+	lval_del(a); return lval_sym("t");
+}
+
+lval* builtin_greater_than(lenv* e, lval* a) {
+	CHECK_COUNT(">", a, 2);
+	CHECK_INPUT_TYPE(">", a, 0, LVAL_NUM);
+	CHECK_INPUT_TYPE(">", a, 1, LVAL_NUM);
+	
+	Num x = a->cell[0]->num;
+	Num y = a->cell[1]->num;
+	int result;
+
+	switch (x.type) {
+		case LONG:
+			switch (y.type) {
+				case LONG:
+					if (x.l == y.l) {
+						result = TRUE;
+						break;
+					}
+					result = FALSE;
+				break;
+				case DOUBLE:
+					if (x.l == y.d) {
+						result = TRUE;
+						break;
+					}
+					result = FALSE;
+				break;
+			}
+		break;
+		case DOUBLE:
+			switch (y.type) {
+				case LONG:
+					if (x.d == y.l) {
+						result = TRUE;
+						break;
+					}
+					result = FALSE;
+				break;
+				case DOUBLE:
+					if (x.d == y.d) {
+						result = TRUE;
+						break;
+					}
+					result = FALSE;
+				break;
+			}
+		break;
+	}
+
+	lval_del(a);
+	return result == TRUE ? lval_sym("t") : lval_sym("nil");
+}
+
 lenv* lenv_copy(lenv* e) {
 	lenv* n = malloc(sizeof(lenv));
 	n->par = e->par;
@@ -905,6 +1019,9 @@ void lenv_add_builtins(lenv* e) {
     lenv_add_builtin(e, "cons", builtin_cons);
     lenv_add_builtin(e, "len", builtin_len);
     lenv_add_builtin(e, "init", builtin_init);
+
+		lenv_add_builtin(e, "eq", builtin_equal);
+		lenv_add_builtin(e, "neq", builtin_not_equal);
     
     lenv_add_builtin(e, "def", builtin_def);
 		lenv_add_builtin(e, "=", builtin_put);

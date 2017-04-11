@@ -35,7 +35,10 @@ lval* builtin_mod(lenv*, lval*);
 lval* builtin_def(lenv*, lval*);
 lval* builtin_lambda(lenv*, lval*);
 lval* builtin_put(lenv* e, lval* a);
-lval* builtin_var(lenv*, lval* a, char* func);
+lval* builtin_var(lenv* e, lval* a, char* func);
+lval* builtin_equal(lenv* e, lval* a);
+lval* builtin_not_equal(lenv* e, lval* a);
+lval* builtin_greater_than(lenv* e, lval* a)
 
 // Utilities
 void lval_del(lval*);
