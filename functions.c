@@ -870,24 +870,23 @@ lval* builtin_equal(lenv* e, lval* a) {
 
 	Num x = a->cell[0]->num;
 	Num y = a->cell[1]->num;
+	int result;
 	switch (x.type) {
 		case LONG:
 			switch (y.type) {
 				case LONG:
 					if (x.l == y.l) {
-						lval_del(a);
-						return lval_sym("t");
+						result = TRUE;
+						break;
 					}
-					lval_del(a);
-					return lval_sym("nil");
+					result = FALSE;
 				break;
 				case DOUBLE:
 					if (x.l == y.d) {
-						lval_del(a);
-						return lval_sym("t");
+						result = TRUE;
+						break;
 					}
-					lval_del(a);
-					return lval_sym("nil");
+					result = FALSE;
 				break;
 			}
 		break;
@@ -895,23 +894,24 @@ lval* builtin_equal(lenv* e, lval* a) {
 			switch (y.type) {
 				case LONG:
 					if (x.d == y.l) {
-						lval_del(a);
-						return lval_sym("t");
+						result = TRUE;
+						break;
 					}
-					lval_del(a);
-					return lval_sym("nil");
+					result = FALSE;
 				break;
 				case DOUBLE:
 					if (x.d == y.d) {
-						lval_del(a);
-						return lval_sym("t");
+						result = TRUE;
+						break;
 					}
-					lval_del(a);
-					return lval_sym("nil");
+					result = FALSE;
 				break;
 			}
 		break;
 	}
+
+	lval_del(a);
+	return result == TRUE ? lval_sym("t") : lval_sym("nil");
 }
 
 lval* builtin_not_equal(lenv* e, lval* a) {
@@ -983,13 +983,50 @@ lval* builtin_smaller_than(lenv* e, lval* a) {
 	CHECK_INPUT_TYPE("<", a, 1, LVAL_NUM);
 
 	// Result of opposite operation
-	lval* opp = builtin_greater_than(e,a);
-	if (strcmp(opp->sym, "t") == 0) {
-		lval_del(opp);
-		return lval_sym("nil");
+	Num x = a->cell[0]->num;
+	Num y = a->cell[1]->num;
+	int result;
+	switch (x.type) {
+		case LONG:
+			switch (y.type) {
+				case LONG:
+					if (x.l < y.l) {
+						result = TRUE;
+						break;
+					}
+					result = FALSE;
+				break;
+				case DOUBLE:
+					if (x.l < y.d) {
+						result = TRUE;
+						break;
+					}
+					result = FALSE;
+				break;
+			}
+		break;
+		case DOUBLE:
+			switch (y.type) {
+				case LONG:
+					if (x.d < y.l) {
+						result = TRUE;
+						break;
+					}
+					result = FALSE;
+				break;
+				case DOUBLE:
+					if (x.d < y.d) {
+						result = TRUE;
+						break;
+					}
+					result = FALSE;
+				break;
+			}
+		break;
 	}
-	lval_del(opp);
-	return lval_sym("t");
+
+	lval_del(a);
+	return result == TRUE ? lval_sym("t") : lval_sym("nil");
 }
 
 lenv* lenv_copy(lenv* e) {
