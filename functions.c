@@ -396,6 +396,8 @@ lval* lval_copy(lval* v) {
                 x->cell[i] = lval_copy(v->cell[i]);
             }
 				break;
+				case LVAL_BOOL:
+					x->bool = v->bool;
     }
     return x;
 }
@@ -879,13 +881,83 @@ lval* builtin_lambda(lenv* e, lval* a) {
 	return lval_lambda(formals, body);
 }
 
-lval* builtin_equal(lenv* e, lval* a) {
-	CHECK_COUNT("eq", a, 2);
-	CHECK_INPUT_TYPE("eq", a, 0, LVAL_NUM);
-	CHECK_INPUT_TYPE("eq", a, 1, LVAL_NUM);
+lval* lval_equals(lval* x, lval* y) {
+	// If the inputs have different type, they can't be equal
+	if (x->type != y->type) {
+		lval_del(x); lval_del(y);
+		return lval_bool(FALSE);
+	}
 
-	Num x = a->cell[0]->num;
-	Num y = a->cell[1]->num;
+	lval* res;
+	switch (x->type) {
+		case LVAL_NUM:
+			// Simple numerical comparison
+			res = numerical_equals(x->num, y->num);
+		break;
+		case LVAL_SYM:
+			res = strcmp(x->sym,y->sym) == 0 ? lval_bool(TRUE) :
+				lval_bool(FALSE);
+		break;
+		case LVAL_FUN:
+			if (x->builtin || y->builtin) {
+				res = x->builtin == y->builtin ? lval_bool(TRUE) :
+					lval_bool(FALSE);
+			}
+			else {
+				if (lval_equals(x->formals,y->formals) &&
+						lval_equals(x->body,y->body)) {
+					res = lval_bool(TRUE);
+				}
+				else res = lval_bool(FALSE);
+			}
+		break;
+		case LVAL_ERR:
+			res = strcmp(x->err,y->err) == 0 ? lval_bool(TRUE) :
+				lval_bool(FALSE);
+		break;
+		case LVAL_SEXPR:
+		case LVAL_QEXPR:
+			if (x->count != y->count) return lval_bool(FALSE);
+			for (int i = 0; i < x->count; i++) {
+				if (lval_equals(x->cell[i], y->cell[i])->bool == FALSE) {
+					lval_del(x); lval_del(y);
+					return lval_bool(FALSE);
+				}
+			}
+			res = lval_bool(TRUE);
+		break;
+	}
+
+	lval_del(x); lval_del(y);
+	return res;
+}
+
+lval* builtin_cmp(lenv* e, lval* a, char* op) {
+	CHECK_COUNT(op, a, 2);
+
+	lval* res;
+	if (strcmp(op, "==") == 0) {
+		res = lval_equals(a->cell[0],a->cell[1]);
+	}
+	else {
+		// Opposite result
+		lval* opp = lval_equals(a->cell[0],a->cell[1]);
+		res = opp->bool == TRUE ? lval_bool(FALSE) : lval_bool(TRUE);
+		lval_del(opp);
+	}
+	lval_del(a);
+	return res;
+}
+
+lval* builtin_eq(lenv* e, lval* a) {
+	return builtin_cmp(e,a,"==");
+}
+
+lval* builtin_ne(lenv* e, lval* a) {
+	return builtin_cmp(e,a,"!=");
+}
+			
+lval* numerical_equals(Num x, Num y) {
 	int result;
 	switch (x.type) {
 		case LONG:
@@ -926,19 +998,7 @@ lval* builtin_equal(lenv* e, lval* a) {
 		break;
 	}
 
-	lval_del(a);
-	return result == TRUE ? lval_sym("t") : lval_sym("nil");
-}
-
-lval* builtin_not_equal(lenv* e, lval* a) {
-	CHECK_COUNT("neq", a, 2);
-	CHECK_INPUT_TYPE("neq", a, 0, LVAL_NUM);
-	CHECK_INPUT_TYPE("neq", a, 1, LVAL_NUM);
-
-	if (strcmp(builtin_equal(e,a)->sym, "t") == 0) {
-		lval_del(a); return lval_sym("nil");
-	}
-	lval_del(a); return lval_sym("t");
+	return lval_bool(result);
 }
 
 lval* builtin_greater_than(lenv* e, lval* a) {
@@ -1140,8 +1200,8 @@ void lenv_add_builtins(lenv* e) {
     lenv_add_builtin(e, "len", builtin_len);
     lenv_add_builtin(e, "init", builtin_init);
 
-		lenv_add_builtin(e, "eq", builtin_equal);
-		lenv_add_builtin(e, "neq", builtin_not_equal);
+		lenv_add_builtin(e, "==", builtin_eq);
+		lenv_add_builtin(e, "!=", builtin_ne);
 		lenv_add_builtin(e, ">", builtin_greater_than);
 		lenv_add_builtin(e, "<", builtin_smaller_than);
 		lenv_add_builtin(e, "<=", builtin_smaller_than_or_equal_to);

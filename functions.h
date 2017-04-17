@@ -37,8 +37,8 @@ lval* builtin_def(lenv*, lval*);
 lval* builtin_lambda(lenv*, lval*);
 lval* builtin_put(lenv* e, lval* a);
 lval* builtin_var(lenv* e, lval* a, char* func);
-lval* builtin_equal(lenv* e, lval* a);
-lval* builtin_not_equal(lenv* e, lval* a);
+lval* builtin_eq(lenv* e, lval* a);
+lval* builtin_ne(lenv* e, lval* a);
 lval* builtin_greater_than(lenv* e, lval* a);
 lval* builtin_smaller_than(lenv* e, lval* a);
 
@@ -60,6 +60,9 @@ char* ltype_name(int);
 int valid_math_input(lval*);
 void print_env(lenv* e);
 lval* lval_call(lenv* e, lval* f, lval* a);
+lval* lval_equals(lval* x, lval* y);
+lval* numerical_equals(Num x, Num y);
+lval* builtin_cmp(lenv* e, lval* a, char* op);
 
 // Environment functions
 void lenv_del(lenv*);
