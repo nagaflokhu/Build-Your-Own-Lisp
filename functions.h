@@ -16,6 +16,7 @@ lval* lval_sexpr(void);
 lval* lval_qexpr(void);
 lval* lval_fun(lbuiltin);
 lval* lval_lambda(lval* formals, lval* body);
+lval* lval_bool(int b);
 
 // builtins
 lval* builtin_head(lenv*, lval*);

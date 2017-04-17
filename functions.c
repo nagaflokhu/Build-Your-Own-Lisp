@@ -47,6 +47,13 @@ lval* lval_qexpr(void) {
     return v;
 }
 
+lval* lval_bool(int b) {
+	lval* v = malloc(sizeof(lval));
+	v->type = LVAL_BOOL;
+	v->bool = b;
+	return v;
+}
+
 void lval_del(lval* v) {
     
     switch (v->type) {
@@ -67,6 +74,7 @@ void lval_del(lval* v) {
             }
             free(v->cell);
 				break;
+				case LVAL_BOOL: break;
     }
     
     free(v);
@@ -173,6 +181,14 @@ void lval_print(lenv* e, lval* v) {
 			else {
 				printf("(\\ "); lval_print(e,v->formals);
 				putchar(' '); lval_print(e,v->body); putchar(')');
+			}
+		break;
+		case LVAL_BOOL:
+			if (v->bool) {
+				printf("t");
+			}
+			else {
+				printf("nil");
 			}
 		break;
 	}
@@ -1029,6 +1045,58 @@ lval* builtin_smaller_than(lenv* e, lval* a) {
 	return result == TRUE ? lval_sym("t") : lval_sym("nil");
 }
 
+lval* builtin_smaller_than_or_equal_to(lenv* e, lval* a) {
+	CHECK_COUNT("<=", a, 2);
+	CHECK_INPUT_TYPE("<=", a, 0, LVAL_NUM);
+	CHECK_INPUT_TYPE("<=", a, 0, LVAL_NUM);
+
+	lval* opp = builtin_greater_than(e, a);
+	int result = strcmp(opp->sym,"t") == 0 ? FALSE : TRUE;
+	// a gets deallocated in builtin_greater_than
+	lval_del(opp);
+	return result == TRUE ? lval_sym("t") : lval_sym("nil");
+}
+
+lval* builtin_greater_than_or_equal_to(lenv* e, lval* a) {
+	CHECK_COUNT(">=", a, 2);
+	CHECK_INPUT_TYPE(">=", a, 0, LVAL_NUM);
+	CHECK_INPUT_TYPE(">=", a, 0, LVAL_NUM);
+
+	lval* opp = builtin_smaller_than(e, a);
+	int result = strcmp(opp->sym,"t") == 0 ? FALSE : TRUE;
+	// a gets deallocated in builtin_smaller_than
+	lval_del(opp);
+	return result == TRUE ? lval_sym("t") : lval_sym("nil");
+}
+
+lval* builtin_if(lenv* e, lval* a) {
+	// an if should have three parts: a condition, code to be evaluated
+	// if the condition is true, and code to be evaluated if the condition
+	// is false
+	CHECK_COUNT("if", a, 3);
+	// Our booleans are implemented as symbols for the time being
+	CHECK_INPUT_TYPE("if", a, 0, LVAL_SYM);
+	CHECK_INPUT_TYPE("if", a, 1, LVAL_QEXPR);
+	CHECK_INPUT_TYPE("if", a, 2, LVAL_QEXPR);
+
+	lval* result;
+	if (strcmp(a->cell[0]->sym,"t") == 0) {
+		// builtin_eval requires an s-expression containing a q-expression
+		// in its first cell. By popping and deleting the condition and the
+		// branch not being evaluated, we create such an s-expression
+		lval_del(lval_pop(a,0));
+		lval_del(lval_pop(a,1));
+		result = builtin_eval(e, a);	
+	}
+	else {
+		// see comment above the lval_dels above
+		lval_del(lval_pop(a,0));
+		lval_del(lval_pop(a,0));
+		result = builtin_eval(e, a);
+	}
+	return result;
+}
+
 lenv* lenv_copy(lenv* e) {
 	lenv* n = malloc(sizeof(lenv));
 	n->par = e->par;
@@ -1076,6 +1144,9 @@ void lenv_add_builtins(lenv* e) {
 		lenv_add_builtin(e, "neq", builtin_not_equal);
 		lenv_add_builtin(e, ">", builtin_greater_than);
 		lenv_add_builtin(e, "<", builtin_smaller_than);
+		lenv_add_builtin(e, "<=", builtin_smaller_than_or_equal_to);
+		lenv_add_builtin(e, ">=", builtin_greater_than_or_equal_to);
+		lenv_add_builtin(e, "if", builtin_if);
     
     lenv_add_builtin(e, "def", builtin_def);
 		lenv_add_builtin(e, "=", builtin_put);

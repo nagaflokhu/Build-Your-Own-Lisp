@@ -3,7 +3,7 @@
 // lvals represent the result of evaluating a lisp
 // expression
 enum {LVAL_ERR, LVAL_NUM, LVAL_SYM, 
-      LVAL_FUN, LVAL_SEXPR, LVAL_QEXPR};
+      LVAL_FUN, LVAL_SEXPR, LVAL_QEXPR, LVAL_BOOL};
 enum {LONG, DOUBLE};
 enum {TRUE, FALSE};
 
@@ -32,6 +32,7 @@ struct lval {
 		Num num;
     char* err;
     char* sym;
+		int bool;
 
 		// Function
     lbuiltin builtin;
