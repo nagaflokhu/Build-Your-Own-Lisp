@@ -884,7 +884,6 @@ lval* builtin_lambda(lenv* e, lval* a) {
 lval* lval_equals(lval* x, lval* y) {
 	// If the inputs have different type, they can't be equal
 	if (x->type != y->type) {
-		lval_del(x); lval_del(y);
 		return lval_bool(FALSE);
 	}
 
