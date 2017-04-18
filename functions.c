@@ -1049,7 +1049,7 @@ lval* builtin_greater_than(lenv* e, lval* a) {
 	}
 
 	lval_del(a);
-	return result == TRUE ? lval_sym("t") : lval_sym("nil");
+	return result == TRUE ? lval_bool(TRUE) : lval_bool(FALSE);
 }
 
 lval* builtin_smaller_than(lenv* e, lval* a) {
@@ -1101,7 +1101,7 @@ lval* builtin_smaller_than(lenv* e, lval* a) {
 	}
 
 	lval_del(a);
-	return result == TRUE ? lval_sym("t") : lval_sym("nil");
+	return result == TRUE ? lval_bool(TRUE) : lval_bool(FALSE);
 }
 
 lval* builtin_smaller_than_or_equal_to(lenv* e, lval* a) {
@@ -1110,10 +1110,10 @@ lval* builtin_smaller_than_or_equal_to(lenv* e, lval* a) {
 	CHECK_INPUT_TYPE("<=", a, 0, LVAL_NUM);
 
 	lval* opp = builtin_greater_than(e, a);
-	int result = strcmp(opp->sym,"t") == 0 ? FALSE : TRUE;
+	int result = opp->bool == TRUE ? FALSE : TRUE;
 	// a gets deallocated in builtin_greater_than
 	lval_del(opp);
-	return result == TRUE ? lval_sym("t") : lval_sym("nil");
+	return result == TRUE ? lval_bool(TRUE) : lval_bool(FALSE);
 }
 
 lval* builtin_greater_than_or_equal_to(lenv* e, lval* a) {
@@ -1122,10 +1122,10 @@ lval* builtin_greater_than_or_equal_to(lenv* e, lval* a) {
 	CHECK_INPUT_TYPE(">=", a, 0, LVAL_NUM);
 
 	lval* opp = builtin_smaller_than(e, a);
-	int result = strcmp(opp->sym,"t") == 0 ? FALSE : TRUE;
+	int result = opp->bool == TRUE ? FALSE : TRUE;
 	// a gets deallocated in builtin_smaller_than
 	lval_del(opp);
-	return result == TRUE ? lval_sym("t") : lval_sym("nil");
+	return result == TRUE ? lval_bool(TRUE) : lval_bool(FALSE);
 }
 
 lval* builtin_if(lenv* e, lval* a) {
@@ -1134,24 +1134,19 @@ lval* builtin_if(lenv* e, lval* a) {
 	// is false
 	CHECK_COUNT("if", a, 3);
 	// Our booleans are implemented as symbols for the time being
-	CHECK_INPUT_TYPE("if", a, 0, LVAL_SYM);
+	CHECK_INPUT_TYPE("if", a, 0, LVAL_BOOL);
 	CHECK_INPUT_TYPE("if", a, 1, LVAL_QEXPR);
 	CHECK_INPUT_TYPE("if", a, 2, LVAL_QEXPR);
 
 	lval* result;
-	if (strcmp(a->cell[0]->sym,"t") == 0) {
-		// builtin_eval requires an s-expression containing a q-expression
-		// in its first cell. By popping and deleting the condition and the
-		// branch not being evaluated, we create such an s-expression
-		lval_del(lval_pop(a,0));
-		lval_del(lval_pop(a,1));
-		result = builtin_eval(e, a);	
+	// make both q-expressions be s-expressions so they can be evaluated
+	a->cell[1]->type = LVAL_SEXPR;
+	a->cell[2]->type = LVAL_SEXPR;
+	if (a->cell[0]->bool == TRUE) {
+		result = lval_eval(e, lval_pop(a,1));
 	}
 	else {
-		// see comment above the lval_dels above
-		lval_del(lval_pop(a,0));
-		lval_del(lval_pop(a,0));
-		result = builtin_eval(e, a);
+		result = lval_eval(e, lval_pop(a,2));
 	}
 	return result;
 }
