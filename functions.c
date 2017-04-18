@@ -184,7 +184,7 @@ void lval_print(lenv* e, lval* v) {
 			}
 		break;
 		case LVAL_BOOL:
-			if (v->bool) {
+			if (v->bool == TRUE) {
 				printf("t");
 			}
 			else {
@@ -928,7 +928,6 @@ lval* lval_equals(lval* x, lval* y) {
 		break;
 	}
 
-	lval_del(x); lval_del(y);
 	return res;
 }
 
