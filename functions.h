@@ -41,6 +41,9 @@ lval* builtin_eq(lenv* e, lval* a);
 lval* builtin_ne(lenv* e, lval* a);
 lval* builtin_greater_than(lenv* e, lval* a);
 lval* builtin_smaller_than(lenv* e, lval* a);
+lval* builtin_and(lenv* e, lval* a);
+lval* builtin_or(lenv* e, lval* a);
+lval* builtin_not(lenv* e, lval* a);
 
 // Utilities
 void lval_del(lval*);

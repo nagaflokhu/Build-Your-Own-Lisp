@@ -804,7 +804,7 @@ lval* lval_call(lenv* e, lval* f, lval* a) {
 	}
 
 	lval_del(a);
-	// If '&' remains in forma list, bind to empty list
+	// If '&' remains in formal list, bind to empty list
 	if (f->formals->count > 0 && strcmp(f->formals->cell[0]->sym, "&") == 0) {
 		// Check that '&' is passed with one other symbol
 		if (f->formals->count != 2) {
@@ -1150,6 +1150,73 @@ lval* builtin_if(lenv* e, lval* a) {
 	return result;
 }
 
+lval* builtin_and(lenv* e, lval* a) {
+	// and should receive two LVAL_BOOLs or more
+	if (a->count < 2) {
+		lval* err = lval_err("Function '&&' received %d arguments, expects at "
+				"least 2.", a->count);
+		lval_del(a);
+		return err;
+	}
+
+	// check that they are all LVAL_BOOL and evaluate
+	lval* result;
+	for (int i = 0; i < a->count; i++) {
+		CHECK_INPUT_TYPE("&&", a, i, LVAL_BOOL);
+		if (a->cell[i]->bool == FALSE) {
+			result = lval_bool(FALSE);
+			lval_del(a);
+			return result;
+		}
+	}
+
+	result = lval_bool(TRUE);
+	lval_del(a);
+	return result;
+}
+
+lval* builtin_or(lenv* e, lval* a) {
+	// should receive at least two inputs
+	if (a->count < 2) {
+		lval* err = lval_err("Function '||' received %d arguments, expects at "
+				"least 2.", a->count);
+		lval_del(a);
+		return err;
+	}
+
+	// Check that arguments are LVAL_BOOLs and evaluate
+	lval* result;
+	for (int i = 0; i < a->count; i++) {
+		CHECK_INPUT_TYPE("||", a, i, LVAL_BOOL);
+		if (a->cell[i]->bool == TRUE) {
+			result = lval_bool(TRUE);
+			lval_del(a);
+			return result;
+		}
+	}
+
+	result = lval_bool(FALSE);
+	lval_del(a);
+	return result;
+}
+
+lval* builtin_not(lenv* e, lval* a) {
+	CHECK_COUNT("!", a, 1);
+	CHECK_INPUT_TYPE("!", a, 0, LVAL_BOOL);
+
+	lval* result;
+	switch (a->cell[0]->bool) {
+		case TRUE:
+			result = lval_bool(FALSE);
+			break;
+		case FALSE:
+			result = lval_bool(TRUE);
+			break;
+	}
+	lval_del(a);
+	return result;
+}
+
 lenv* lenv_copy(lenv* e) {
 	lenv* n = malloc(sizeof(lenv));
 	n->par = e->par;
@@ -1200,6 +1267,9 @@ void lenv_add_builtins(lenv* e) {
 		lenv_add_builtin(e, "<=", builtin_smaller_than_or_equal_to);
 		lenv_add_builtin(e, ">=", builtin_greater_than_or_equal_to);
 		lenv_add_builtin(e, "if", builtin_if);
+		lenv_add_builtin(e, "&&", builtin_and);
+		lenv_add_builtin(e, "||", builtin_or);
+		lenv_add_builtin(e, "!", builtin_not);
     
     lenv_add_builtin(e, "def", builtin_def);
 		lenv_add_builtin(e, "=", builtin_put);
