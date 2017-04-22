@@ -31,6 +31,14 @@ lval* lval_sym(char* s) {
     return v;
 }
 
+lval* lval_str(char* s) {
+	lval* v = malloc(sizeof(lval));
+	v->type = LVAL_STR;
+	v->str = malloc(strlen(s)+1);
+	strcpy(v->str, s);
+	return v;
+}
+
 lval* lval_sexpr(void) {
     lval* v = malloc(sizeof(lval));
     v->type = LVAL_SEXPR;
@@ -67,6 +75,7 @@ void lval_del(lval* v) {
 				break;
         case LVAL_ERR: free(v->err); break;
         case LVAL_SYM: free(v->sym); break;
+				case LVAL_STR: free(v->str); break;
         case LVAL_SEXPR:
         case LVAL_QEXPR:
             for (int i = 0; i < v->count; i++) {
@@ -110,6 +119,7 @@ lval* lval_read(mpc_ast_t* t) {
     // If Symbol or Number, return converstion to that type.
     if (strstr(t->tag, "number")) return lval_read_num(t);
     if (strstr(t->tag, "symbol")) return lval_sym(t->contents);
+		if (strstr(t->tag, "string")) return lval_read_str(t);
     
     // If root (>) or sexpr, create empty list
     lval* x = NULL;
@@ -128,6 +138,20 @@ lval* lval_read(mpc_ast_t* t) {
     }
     
     return x;
+}
+
+lval* lval_read_str(mpc_ast_t* t) {
+	// Cut off final quote character
+	t->contents[strlen(t->contents)-1] = '\0';
+	// Copy the string without the initial quote
+	char* unescaped = malloc(strlen(t->contents+1)+1);
+	strcpy(unescaped, t->contents+1);
+	// Pass through the unescape function
+	unescaped = mpcf_unescape(unescaped);
+	// New lval using unescaped string
+	lval* str = lval_str(unescaped);
+	free(unescaped);
+	return str;
 }
 
 lval* lval_add(lval* v, lval* x) {
@@ -168,6 +192,9 @@ void lval_print(lenv* e, lval* v) {
 		case LVAL_SYM:
 			printf("%s", v->sym);
 		break;
+	  case LVAL_STR:
+			lval_print_str(v);
+		break;
 		case LVAL_SEXPR:
 			lval_expr_print(e, v, '(', ')');
 		break;
@@ -192,6 +219,16 @@ void lval_print(lenv* e, lval* v) {
 			}
 		break;
 	}
+}
+
+void lval_print_str(lval* v) {
+	char* escaped = malloc(strlen(v->str)+1);
+	strcpy(escaped, v->str);
+	// Pass it through the escape function in the mpc library
+	escaped = mpcf_escape(escaped);
+	// Print between '"' characters
+	printf("\"%s\"", escaped);
+	free(escaped);
 }
 
 void lval_println(lenv* e, lval* v) {
@@ -383,10 +420,16 @@ lval* lval_copy(lval* v) {
             
         case LVAL_ERR:
             x->err = malloc(strlen(v->err)+1);
-            strcpy(x->err, v->err); break;
+            strcpy(x->err, v->err); 
+				break;
         case LVAL_SYM:
             x->sym = malloc(strlen(v->sym)+1);
-            strcpy(x->sym, v->sym); break;
+            strcpy(x->sym, v->sym); 
+				break;
+				case LVAL_STR:
+						x->str = malloc(strlen(v->sym)+1);
+						strcpy(x->str, v->str);
+				break;
             
         case LVAL_SEXPR:
         case LVAL_QEXPR:
@@ -837,9 +880,10 @@ char* ltype_name(int t) {
 		case LVAL_NUM: return "number";
 		case LVAL_ERR: return "error";
 		case LVAL_SYM: return "symbol";
+		case LVAL_STR: return "string";
 		case LVAL_SEXPR: return "s-expression";
 		case LVAL_QEXPR: return "q-expression";
-		default: return "Unknown";
+		default: return "unknown";
 	}
 }
 
@@ -894,8 +938,10 @@ lval* lval_equals(lval* x, lval* y) {
 			res = numerical_equals(x->num, y->num);
 		break;
 		case LVAL_SYM:
-			res = strcmp(x->sym,y->sym) == 0 ? lval_bool(TRUE) :
-				lval_bool(FALSE);
+			res = strcmp(x->sym,y->sym) == 0 ? lval_bool(TRUE) : lval_bool(FALSE);
+		break;
+		case LVAL_STR:
+			res = strcmp(x->str, y->str) == 0 ? lval_bool(TRUE) : lval_bool(FALSE);
 		break;
 		case LVAL_FUN:
 			if (x->builtin || y->builtin) {

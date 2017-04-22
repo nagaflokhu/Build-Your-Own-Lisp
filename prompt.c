@@ -34,6 +34,7 @@ int main(int argc, char** argv) {
     mpc_parser_t* Long = mpc_new("long");
     mpc_parser_t* Double = mpc_new("double");
     mpc_parser_t* Symbol = mpc_new("symbol");
+		mpc_parser_t* String = mpc_new("string");
     mpc_parser_t* Sexpr = mpc_new("sexpr");
     mpc_parser_t* Qexpr = mpc_new("qexpr");
     mpc_parser_t* Expr = mpc_new("expr");
@@ -45,11 +46,12 @@ int main(int argc, char** argv) {
           long: /-?[0-9]+/; \
           double: /-?[0-9]+[.][0-9]*/; \
           symbol: /[a-zA-Z0-9_+\\-*\\/\\\\=<>!&%^|]+/; \
+					string: /\"(\\\\.|[^\"])*\"/; \
           sexpr: '(' <expr>* ')'; \
           qexpr: '{' <expr>* '}'; \
-          expr: <number> | <symbol> | <sexpr> | <qexpr>; \
+          expr: <number> | <symbol> | <string> | <sexpr> | <qexpr>; \
           lispr: /^/ <expr>* /$/; \
-        ", Number, Long, Double, Symbol, Sexpr, Qexpr, Expr, Lispr);
+        ", Number, Long, Double, Symbol, String, Sexpr, Qexpr, Expr, Lispr);
     
     puts("Lispr Version 0.0.0.0.1");
     puts("Press ctrl+c to Exit\n");

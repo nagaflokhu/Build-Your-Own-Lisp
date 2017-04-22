@@ -12,6 +12,7 @@ lval* lval_read(mpc_ast_t*);
 lval* lval_num(Num);
 lval* lval_err(char*, ...);
 lval* lval_sym(char*);
+lval* lval_str(char* s);
 lval* lval_sexpr(void);
 lval* lval_qexpr(void);
 lval* lval_fun(lbuiltin);
@@ -66,6 +67,8 @@ lval* lval_call(lenv* e, lval* f, lval* a);
 lval* lval_equals(lval* x, lval* y);
 lval* numerical_equals(Num x, Num y);
 lval* builtin_cmp(lenv* e, lval* a, char* op);
+void lval_print_str(lval* v);
+lval* lval_read_str(mpc_ast_t* t);
 
 // Environment functions
 void lenv_del(lenv*);

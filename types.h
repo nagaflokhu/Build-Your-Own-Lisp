@@ -3,9 +3,9 @@
 // lvals represent the result of evaluating a lisp
 // expression
 enum {LVAL_ERR, LVAL_NUM, LVAL_SYM, 
-      LVAL_FUN, LVAL_SEXPR, LVAL_QEXPR, LVAL_BOOL};
+      LVAL_FUN, LVAL_SEXPR, LVAL_QEXPR, LVAL_BOOL, LVAL_STR};
 enum {LONG, DOUBLE};
-enum {TRUE, FALSE};
+enum {FALSE, TRUE};
 
 // Since lvals can either hold longs or doubles, I'm creating
 // a union type, Num, to holdthe values, which should simplify
@@ -32,6 +32,7 @@ struct lval {
 		Num num;
     char* err;
     char* sym;
+		char* str;
 		int bool;
 
 		// Function
