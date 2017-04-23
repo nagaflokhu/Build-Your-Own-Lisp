@@ -28,17 +28,18 @@ void add_history(char* unused) {}
 #endif
 
 int main(int argc, char** argv) {
-    
+		
     // Create parser
-    mpc_parser_t* Number = mpc_new("number");
-    mpc_parser_t* Long = mpc_new("long");
-    mpc_parser_t* Double = mpc_new("double");
-    mpc_parser_t* Symbol = mpc_new("symbol");
-		mpc_parser_t* String = mpc_new("string");
-    mpc_parser_t* Sexpr = mpc_new("sexpr");
-    mpc_parser_t* Qexpr = mpc_new("qexpr");
-    mpc_parser_t* Expr = mpc_new("expr");
-    mpc_parser_t* Lispr = mpc_new("lispr");
+    Number = mpc_new("number");
+    Long = mpc_new("long");
+    Double = mpc_new("double");
+    Symbol = mpc_new("symbol");
+		String = mpc_new("string");
+		Comment = mpc_new("comment");
+    Sexpr = mpc_new("sexpr");
+    Qexpr = mpc_new("qexpr");
+    Expr = mpc_new("expr");
+    Lispr = mpc_new("lispr");
     
     mpca_lang(MPCA_LANG_DEFAULT,
         "\
@@ -47,17 +48,30 @@ int main(int argc, char** argv) {
           double: /-?[0-9]+[.][0-9]*/; \
           symbol: /[a-zA-Z0-9_+\\-*\\/\\\\=<>!&%^|]+/; \
 					string: /\"(\\\\.|[^\"])*\"/; \
+					comment: /;[^\\n\\r]*/; \
           sexpr: '(' <expr>* ')'; \
           qexpr: '{' <expr>* '}'; \
-          expr: <number> | <symbol> | <string> | <sexpr> | <qexpr>; \
+          expr: <number> | <symbol> | <string> | <comment> | <sexpr> | \
+						<qexpr>; \
           lispr: /^/ <expr>* /$/; \
-        ", Number, Long, Double, Symbol, String, Sexpr, Qexpr, Expr, Lispr);
+        ", Number, Long, Double, Symbol, String, Comment, Sexpr, Qexpr, Expr, 
+				Lispr);
     
     puts("Lispr Version 0.0.0.0.1");
     puts("Press ctrl+c to Exit\n");
     
     lenv* e = lenv_new();
-    lenv_add_builtins(e);
+    lenv_add_builtins(e);		
+		
+		if (argc >= 2) {
+			// this means we have been supplied with files to load
+			for (int i = 1; i < argc; i++) {
+				lval* args = lval_add(lval_sexpr(), lval_str(argv[i]));
+				lval* x = builtin_load(e, args);
+				if (x->type == LVAL_ERR) lval_println(e,x);
+				lval_del(x);
+			}
+		}
     
     while (1) {
         char* input = readline("lispr> ");
@@ -82,7 +96,8 @@ int main(int argc, char** argv) {
     
     // Deallocate memory
     lenv_del(e);
-    mpc_cleanup(8, Number, Long, Double, Symbol, Sexpr, Qexpr, Expr, Lispr);
+    mpc_cleanup(10, Number, Long, Double, Symbol, String, Comment, Sexpr, 
+				Qexpr, Expr, Lispr);
     return 0;
 }
 

@@ -3,6 +3,19 @@
 #include "types.h"
 #include "mpc.h"
 #include "macros.h"
+
+// parser
+mpc_parser_t* Number;
+mpc_parser_t* Long;
+mpc_parser_t* Double;
+mpc_parser_t* Symbol;
+mpc_parser_t* String;
+mpc_parser_t* Comment;
+mpc_parser_t* Sexpr;
+mpc_parser_t* Qexpr;
+mpc_parser_t* Expr;
+mpc_parser_t* Lispr;
+
 // Internal representation generation
 lval* eval(mpc_ast_t*);
 lval* lval_read_num(mpc_ast_t*);
@@ -45,6 +58,9 @@ lval* builtin_smaller_than(lenv* e, lval* a);
 lval* builtin_and(lenv* e, lval* a);
 lval* builtin_or(lenv* e, lval* a);
 lval* builtin_not(lenv* e, lval* a);
+lval* builtin_load(lenv* e, lval* a);
+lval* builtin_print(lenv* e, lval* a);
+lval* builtin_error(lenv* e, lval* a);
 
 // Utilities
 void lval_del(lval*);

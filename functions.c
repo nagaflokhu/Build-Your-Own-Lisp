@@ -134,6 +134,7 @@ lval* lval_read(mpc_ast_t* t) {
         if (strcmp(t->children[i]->contents, "{") == 0) continue;
         if (strcmp(t->children[i]->contents, "}") == 0) continue;
         if (strcmp(t->children[i]->tag, "regex") == 0) continue;
+				if (strcmp(t->children[i]->tag, "comment") == 0) continue;
         x = lval_add(x, lval_read(t->children[i]));
     }
     
@@ -1263,6 +1264,24 @@ lval* builtin_not(lenv* e, lval* a) {
 	return result;
 }
 
+lval* builtin_print(lenv* e, lval* a) {
+	for (int i = 0; i < a->count; i++) {
+		lval_print(e, a->cell[i]); putchar(' ');
+	}
+	putchar('\n');
+	lval_del(a);
+	return lval_sexpr();
+}
+
+lval* builtin_error(lenv* e, lval* a) {
+	CHECK_COUNT("error", a, 1);
+	CHECK_INPUT_TYPE("error", a, 0, LVAL_STR);
+
+	lval* err = lval_err(a->cell[0]->str);
+	lval_del(a);
+	return err;
+}
+
 lenv* lenv_copy(lenv* e) {
 	lenv* n = malloc(sizeof(lenv));
 	n->par = e->par;
@@ -1320,4 +1339,43 @@ void lenv_add_builtins(lenv* e) {
     lenv_add_builtin(e, "def", builtin_def);
 		lenv_add_builtin(e, "=", builtin_put);
 		lenv_add_builtin(e, "\\", builtin_lambda);
+		lenv_add_builtin(e, "load", builtin_load);
+		lenv_add_builtin(e, "print", builtin_print);
+		lenv_add_builtin(e, "error", builtin_error);
+}
+
+lval* builtin_load(lenv* e, lval* a) {
+	CHECK_COUNT("load", a, 1);
+	CHECK_INPUT_TYPE("load", a, 0, LVAL_STR);
+
+	// parse file
+	mpc_result_t r;
+	if (mpc_parse_contents(a->cell[0]->str, Lispr, &r)) {
+		// read contents
+		lval* expr = lval_read(r.output);
+		mpc_ast_delete(r.output);
+
+		// evaluate each expression
+		while (expr->count) {
+			lval* x = lval_eval(e, lval_pop(expr, 0));
+			if (x->type == LVAL_ERR) lval_println(e,x);
+			lval_del(x);
+		}
+
+		// delete expression and arguments
+		lval_del(expr); lval_del(a);
+
+		// return empty list to signal correct execution
+		return lval_sexpr();
+	}
+
+	else {
+		// get parse error as string
+		char* err_msg = mpc_err_string(r.error);
+		mpc_err_delete(r.error);
+		lval* err = lval_err("Could not load library %s", err_msg);
+		free(err_msg);
+		lval_del(a);
+		return err;
+	}
 }
