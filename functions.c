@@ -300,25 +300,63 @@ lval* lval_take(lval* v, int i) {
 lval* builtin_head(lenv* e, lval* a) {
     // Check for error conditions
 		CHECK_COUNT("head", a, 1);
-		CHECK_INPUT_TYPE("head", a, 0, LVAL_QEXPR);
-    CHECK_EMPTY(a, "Function 'head' passed {}!");
+		int first_type = a->cell[0]->type;
+		if (first_type != LVAL_QEXPR && first_type != LVAL_STR) {
+			lval* err = lval_err("Function 'head' passed wrong argument type. "
+					"Got a %s, expected a %s or a %s.", ltype_name(first_type),
+					ltype_name(LVAL_QEXPR), ltype_name(LVAL_STR));
+			lval_del(a);
+			return err;
+		}
+
+		lval* v;
+		if (first_type == LVAL_QEXPR) {
+			CHECK_EMPTY(a, "Function 'head' passed {}!");
+			v = lval_take(a, 0);
+			// Delete all other element and return v
+			while (v->count > 1) lval_del(lval_pop(v, 1));
+		}
+		else {
+			char* str = malloc(2);
+			str[0] = a->cell[0]->str[0];
+			str[1] = '\0';
+			v = lval_str(str);
+			free(str);
+			lval_del(a);
+		}
     
-    lval* v = lval_take(a, 0);
-    
-    // Delete all other element and return v
-    while (v->count > 1) lval_del(lval_pop(v, 1));
     return v;
 }
 
 lval* builtin_tail(lenv* e, lval* a) {
     // Check for error conditions
 		CHECK_COUNT("tail", a, 1);
-		CHECK_INPUT_TYPE("tail", a, 0, LVAL_QEXPR);
-    CHECK_EMPTY(a, "Function 'tail' passed {}!");
+		int first_type = a->cell[0]->type;
+		if (first_type != LVAL_QEXPR && first_type != LVAL_STR) {
+			lval* err = lval_err("Function 'tail' passed wrong argument type. Got a "
+					"%s, expected a %s or a %s.", ltype_name(first_type),
+					ltype_name(LVAL_QEXPR), ltype_name(LVAL_STR));
+			lval_del(a);
+			return err;
+		}
+
+	lval* v;
+		if (first_type == LVAL_QEXPR) {
+			CHECK_EMPTY(a, "Function 'tail' passed {}!");
+			// a is a q-expression. We assign its contents to v, and then delete
+			// the first element
+			v = lval_take(a, 0);
+			lval_del(lval_pop(v, 0));
+		}
+		else {
+			char* str = malloc(strlen(a->cell[0]->str));
+			// skip the first character
+			strcpy(str, a->cell[0]->str+1);
+    	v = lval_str(str);
+			free(str);
+			lval_del(a);
+		}
     
-    lval* v = lval_take(a, 0);
-    
-    lval_del(lval_pop(v, 0));
     return v;
 }
 
@@ -336,13 +374,44 @@ lval* builtin_eval(lenv* e, lval* a) {
 }
 
 lval* builtin_join(lenv* e, lval* a) {
-    for (int i = 0; i < a->count; i++) {
-			CHECK_INPUT_TYPE("join", a, i, LVAL_QEXPR);
-		} 
-    lval* x = lval_pop(a,0);
-    while (a->count) {
-        x = lval_join(x, lval_pop(a,0));
-    }
+		// We want join to work on q-expressions and strings. We need to check
+		// that the arguments passed to it are either all q-expressions or all
+		// strings.
+		int first_type = a->cell[0]->type;
+		if (first_type != LVAL_QEXPR && first_type != LVAL_STR) {
+			lval* err = lval_err("Function 'join' pased wrong argument type. Got a "
+					"%s, expected a %s or %s.", ltype_name(first_type), 
+					ltype_name(LVAL_QEXPR), ltype_name(LVAL_STR));
+			lval_del(a);
+			return err;
+		}
+
+		for (int i = 1; i < a->count; i++) {
+			if (a->cell[i]->type != first_type) {
+				lval* err = lval_err("Function 'join' passed incompatible types. Got "
+						"a %s as the first argument and a %s.", ltype_name(first_type),
+						ltype_name(a->cell[i]->type));
+				lval_del(a);
+				return err;
+			}
+		}
+     
+		lval* x;
+		if (first_type == LVAL_QEXPR) {
+			x = lval_pop(a,0);
+			while (a->count) {
+					x = lval_join(x, lval_pop(a,0));
+			}
+		}
+		else {
+			char* str = malloc(strlen(a->cell[0]->str)+1);
+			strcpy(str, a->cell[0]->str);
+			for (int i = 1; i < a->count; i++) {
+				strcat(str, a->cell[i]->str);
+			}
+			x = lval_str(str);
+			free(str);
+		}
     
     lval_del(a);
     return x;
