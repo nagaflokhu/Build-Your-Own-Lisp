@@ -51,9 +51,8 @@ int main(int argc, char** argv) {
 					comment: /;[^\\n\\r]*/; \
           sexpr: '(' <expr>* ')'; \
           qexpr: '{' <expr>* '}'; \
-          expr: <number> | <symbol> | <string> | <comment> | <sexpr> | \
-						<qexpr>; \
-          lispr: /^/ <expr>* /$/; \
+          expr: <number> | <symbol> | <string> | <sexpr> | <qexpr>; \
+          lispr: /^/ (<expr> | <comment>)* /$/; \
         ", Number, Long, Double, Symbol, String, Comment, Sexpr, Qexpr, Expr, 
 				Lispr);
     
@@ -62,6 +61,8 @@ int main(int argc, char** argv) {
     
     lenv* e = lenv_new();
     lenv_add_builtins(e);		
+		lval* std = lval_add(lval_sexpr(), lval_str("stdlib.lispr"));
+		builtin_load(e,std);
 		
 		if (argc >= 2) {
 			// this means we have been supplied with files to load
